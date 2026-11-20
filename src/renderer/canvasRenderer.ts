@@ -323,9 +323,9 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.fillRect(bx, by + 13, Math.round(barW * ratio), 7);
   }
 
-  // 11. Top Announcement Banner (offset below boss bar if boss active)
+  // 11. Top Announcement Banner (offset below boss/dungeon bar if active)
   if (state.bannerTimer > 0 && state.bannerText) {
-    const by = activeBoss ? 42 : 12;
+    const by = activeBoss || state.activeDungeon ? 42 : 12;
     ctx.save();
     ctx.globalAlpha = Math.min(1, state.bannerTimer * 1.6);
     ctx.fillStyle = 'rgba(11, 18, 32, 0.88)';
