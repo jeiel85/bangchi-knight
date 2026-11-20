@@ -1,4 +1,5 @@
 import type {
+  AchievementDef,
   CompanionDef,
   DungeonDef,
   EnemyKind,
@@ -11,6 +12,7 @@ import type {
   KnightSkillDef,
   QuestDef,
   RankDef,
+  RelicDef,
   StanceDef,
   TrainingDef,
   ZoneDef,
@@ -162,6 +164,78 @@ export const RANKS: RankDef[] = [
   { rank: 3, title: '원정 기사단장', reqStage: 9, atkBonusPct: 80, medalReward: 5 },
   { rank: 4, title: '왕국 대장군', reqStage: 13, atkBonusPct: 130, medalReward: 8 },
 ];
+
+export const RELICS: RelicDef[] = [
+  {
+    id: 'phoenixPlume',
+    name: '불사조의 깃털',
+    tag: '치명 폭발',
+    desc: '치명타 시 35% 확률로 적 전체에 공격력 70% 화염 폭발.',
+    iconIndex: 0,
+    color: '#fb923c',
+  },
+  {
+    id: 'frostSeal',
+    name: '서리왕의 인장',
+    tag: '빙결 제어',
+    desc: '기사 5타마다 적 1.2초 빙결(기절) + 기절 대상 피해 +40%.',
+    iconIndex: 1,
+    color: '#38bdf8',
+  },
+  {
+    id: 'stormCompass',
+    name: '폭풍의 나침반',
+    tag: '스킬 가속',
+    desc: '모든 기사 스킬 쿨타임 -22% & 공격속도 +18%.',
+    iconIndex: 2,
+    color: '#60a5fa',
+  },
+  {
+    id: 'citadelHeart',
+    name: '성채의 심장',
+    tag: '철벽 반사',
+    desc: '최대 체력 +35%, 철벽 진형 중 피격 시 공격력 120% 반사.',
+    iconIndex: 3,
+    color: '#34d399',
+  },
+  {
+    id: 'goldenDice',
+    name: '황금 도적의 주사위',
+    tag: '잭팟 파밍',
+    desc: '골드/광석 +45%, 처치 시 8% 확률로 5배 잭팟 골드 폭발!',
+    iconIndex: 4,
+    color: '#facc15',
+  },
+  {
+    id: 'sovereignCrown',
+    name: '군주의 왕관',
+    tag: '원정대 시너지',
+    desc: '동료 용병(리아·카인·엘렌) 피해 및 치유 위력 +60%.',
+    iconIndex: 5,
+    color: '#c084fc',
+  },
+];
+
+export const ACHIEVEMENTS: AchievementDef[] = [
+  { id: 'first_boss', title: '첫 구역 보스 토벌', desc: '구역 보스 1체 이상 격파', target: 1, rewardMedals: 1, rewardOre: 15 },
+  { id: 'forge_20', title: '불타는 모루', desc: '대장간 누적 단조 20회 달성', target: 20, rewardMedals: 2, rewardOre: 25 },
+  { id: 'refine_8', title: '제련의 장인', desc: '장비 누적 제련 8회 달성', target: 8, rewardMedals: 2, rewardOre: 20 },
+  { id: 'full_squad', title: '완전체 원정대', desc: '동료 용병 3명 모두 영입', target: 3, rewardMedals: 2, rewardOre: 30 },
+  { id: 'guard_2', title: '완벽한 철벽', desc: '보스 강타 철벽 퍼펙트 가드 2회', target: 2, rewardMedals: 3, rewardOre: 25 },
+  { id: 'dungeon_3', title: '던전 정복자', desc: '특수 던전 3회 클리어', target: 3, rewardMedals: 3, rewardOre: 35 },
+  { id: 'epic_gear', title: '영웅의 무장', desc: '영웅 이상 등급 장비 장착', target: 1, rewardMedals: 2, rewardOre: 25 },
+  { id: 'codex_6', title: '왕국 박물학자', desc: '몬스터·보스 도감 6종 발견', target: 6, rewardMedals: 2, rewardOre: 25 },
+  { id: 'kills_250', title: '백전노장', desc: '몬스터 누적 250마리 처치', target: 250, rewardMedals: 2, rewardOre: 30 },
+  { id: 'stage_7', title: '안개 너머로', desc: 'STAGE 7 (안개 늪지대) 도달', target: 7, rewardMedals: 4, rewardOre: 40 },
+];
+
+export function getMaxRelicSlots(claimedRank: number): number {
+  return claimedRank >= 2 ? 3 : 2;
+}
+
+export function getRelicAppraisalCost(unlockedCount: number): number {
+  return 2 + unlockedCount * 2;
+}
 
 export const TICKET_RECHARGE_SEC = 180;
 export const MAX_DUNGEON_TICKETS = 5;

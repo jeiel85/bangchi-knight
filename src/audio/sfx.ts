@@ -1,17 +1,34 @@
 import type { GameEventType } from '../engine/types';
 
-// Upbeat 16-bit medieval march arpeggio (Hz, 0 = rest)
-const BGM_NOTES = [
-  293.66, 369.99, 440.0, 587.33, 440.0, 369.99, 440.0, 0,
-  329.63, 392.0, 493.88, 659.25, 587.33, 493.88, 440.0, 0,
-  293.66, 369.99, 440.0, 587.33, 659.25, 587.33, 493.88, 440.0,
-  392.0, 440.0, 493.88, 440.0, 369.99, 329.63, 293.66, 0,
+// Heroic 16-bit adventure march (Lead + Bass)
+const NORMAL_LEAD = [
+  293.66, 0, 369.99, 440.0, 587.33, 0, 440.0, 369.99,
+  329.63, 0, 392.0, 493.88, 659.25, 587.33, 493.88, 440.0,
+  293.66, 369.99, 440.0, 587.33, 659.25, 0, 587.33, 493.88,
+  440.0, 493.88, 587.33, 440.0, 369.99, 329.63, 293.66, 0,
+];
+const NORMAL_BASS = [
+  146.83, 146.83, 220.0, 146.83, 164.81, 164.81, 246.94, 164.81,
+  146.83, 146.83, 196.0, 220.0, 146.83, 164.81, 220.0, 146.83,
+];
+
+// Intense minor-key boss & dungeon battle theme
+const BOSS_LEAD = [
+  293.66, 293.66, 349.23, 440.0, 466.16, 440.0, 349.23, 329.63,
+  293.66, 349.23, 440.0, 587.33, 523.25, 466.16, 440.0, 392.0,
+  349.23, 349.23, 440.0, 523.25, 587.33, 523.25, 466.16, 440.0,
+  440.0, 392.0, 349.23, 329.63, 293.66, 329.63, 293.66, 0,
+];
+const BOSS_BASS = [
+  146.83, 146.83, 174.61, 146.83, 116.54, 116.54, 130.81, 146.83,
+  174.61, 174.61, 196.0, 174.61, 164.81, 130.81, 146.83, 110.0,
 ];
 
 class SfxManager {
   private ctx: AudioContext | null = null;
   private bgmTimer: number | null = null;
   private bgmStep = 0;
+  private bgmMood: 'normal' | 'boss' = 'normal';
   public enabled = true;
   public bgmEnabled = false;
 
@@ -47,20 +64,42 @@ class SfxManager {
     }
   }
 
+  public setBgmMood(mood: 'normal' | 'boss'): void {
+    if (this.bgmMood === mood) return;
+    this.bgmMood = mood;
+    if (this.bgmEnabled && this.bgmTimer !== null) {
+      this.stopBgmLoop();
+      this.startBgmLoop();
+    }
+  }
+
   private startBgmLoop(): void {
     if (typeof window === 'undefined' || this.bgmTimer !== null) return;
+    const stepMs = this.bgmMood === 'boss' ? 165 : 210;
     this.bgmTimer = window.setInterval(() => {
       if (!this.bgmEnabled || !this.ctx || this.ctx.state !== 'running') return;
-      const freq = BGM_NOTES[this.bgmStep % BGM_NOTES.length];
-      this.bgmStep += 1;
-      if (freq > 0) {
-        const now = this.ctx.currentTime;
-        this.tone(this.ctx, 'triangle', freq, freq, 0.16, 0.022, now);
-        if (this.bgmStep % 4 === 1) {
-          this.tone(this.ctx, 'sine', freq * 0.5, freq * 0.5, 0.22, 0.02, now);
-        }
+      const now = this.ctx.currentTime;
+      const isBoss = this.bgmMood === 'boss';
+      const lead = isBoss ? BOSS_LEAD : NORMAL_LEAD;
+      const bass = isBoss ? BOSS_BASS : NORMAL_BASS;
+
+      const leadFreq = lead[this.bgmStep % lead.length];
+      if (leadFreq > 0) {
+        this.tone(this.ctx, isBoss ? 'square' : 'triangle', leadFreq, leadFreq, 0.14, isBoss ? 0.015 : 0.022, now);
       }
-    }, 220);
+
+      if (this.bgmStep % 2 === 0) {
+        const bassFreq = bass[Math.floor(this.bgmStep / 2) % bass.length];
+        this.tone(this.ctx, 'triangle', bassFreq, bassFreq, 0.24, 0.024, now);
+      }
+
+      // Soft rhythmic percussion click on off-beats
+      if (this.bgmStep % 2 === 1) {
+        this.tone(this.ctx, 'sine', isBoss ? 140 : 110, 48, 0.045, 0.014, now);
+      }
+
+      this.bgmStep += 1;
+    }, stepMs);
   }
 
   private stopBgmLoop(): void {

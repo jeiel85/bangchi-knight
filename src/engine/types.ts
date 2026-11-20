@@ -14,6 +14,14 @@ export type KnightSkillId = 'whirlwind' | 'judgment' | 'oath';
 
 export type DungeonId = 'oreMine' | 'bossArena';
 
+export type RelicId =
+  | 'phoenixPlume'
+  | 'frostSeal'
+  | 'stormCompass'
+  | 'citadelHeart'
+  | 'goldenDice'
+  | 'sovereignCrown';
+
 export type AutoForgeFilter = 'upgrade' | 'rare' | 'epic';
 
 export type EnemyKind = 'goblin' | 'boar' | 'bandit' | 'scorpion' | 'bogling' | 'golem' | 'wyvern' | 'boss';
@@ -81,6 +89,24 @@ export interface RankDef {
   reqStage: number;
   atkBonusPct: number;
   medalReward: number;
+}
+
+export interface RelicDef {
+  id: RelicId;
+  name: string;
+  tag: string;
+  desc: string;
+  iconIndex: number;
+  color: string;
+}
+
+export interface AchievementDef {
+  id: string;
+  title: string;
+  desc: string;
+  target: number;
+  rewardMedals: number;
+  rewardOre: number;
 }
 
 export interface ActiveDungeonState {
@@ -216,6 +242,7 @@ export interface FloatingText {
   id: number;
   x: number;
   y: number;
+  vx: number;
   vy: number;
   text: string;
   color: string;
@@ -322,6 +349,9 @@ export interface SaveData {
   dungeonTiers: Record<DungeonId, number>;
   ticketRechargeTimer: number;
   claimedRank: number;
+  unlockedRelics: RelicId[];
+  equippedRelics: RelicId[];
+  claimedAchievements: string[];
   questIndex: number;
   questBaseline: number;
   discoveredEnemies: string[];
@@ -376,6 +406,9 @@ export interface GameState {
   dungeonResult: DungeonResultModal | null;
 
   claimedRank: number;
+  unlockedRelics: RelicId[];
+  equippedRelics: RelicId[];
+  claimedAchievements: string[];
   questIndex: number;
   questBaseline: number;
   discoveredEnemies: string[];
@@ -399,6 +432,12 @@ export interface GameState {
   morale: number;
   rallyTimer: number;
   guardBurstTimer: number;
+  hitStopTimer: number;
+  cutInTimer: number;
+  cutInText: string;
+  cutInColor: string;
+  hitCounter: number;
+  dustTimer: number;
   autoForgeTimer: number;
   screenShake: number;
   bannerText: string;

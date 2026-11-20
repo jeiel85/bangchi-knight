@@ -41,7 +41,7 @@ export function loadSaveData(adapter: StorageAdapter = defaultAdapter): SaveData
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as SaveData;
-    if (!parsed || (parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4) || !parsed.equipment) {
+    if (!parsed || (parsed.version < 2 || parsed.version > 5) || !parsed.equipment) {
       return null;
     }
     return parsed;

@@ -51,27 +51,48 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.fillRect(0, GROUND_Y, ARENA_WIDTH, ARENA_HEIGHT - GROUND_Y);
   }
 
-  // Zone ambient particles
-  if (zone.id === 'frostpeak') {
-    ctx.fillStyle = 'rgba(224, 242, 254, 0.78)';
-    for (let i = 0; i < 18; i++) {
+  // Zone ambient atmosphere (snow, embers, swamp fireflies, warm sunlit motes)
+  if (activeBgId === 'frostpeak') {
+    ctx.fillStyle = 'rgba(224, 242, 254, 0.8)';
+    for (let i = 0; i < 20; i++) {
       const sx = (i * 53 + timeSec * 22) % ARENA_WIDTH;
       const sy = (i * 37 + timeSec * 36) % GROUND_Y;
       ctx.fillRect(Math.round(sx), Math.round(sy), 2, 2);
     }
-  } else if (zone.id === 'cinder-citadel') {
-    ctx.fillStyle = 'rgba(251, 146, 60, 0.8)';
-    for (let i = 0; i < 16; i++) {
+  } else if (activeBgId === 'cinder-citadel') {
+    ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+    for (let i = 0; i < 18; i++) {
       const ex = (i * 61 + Math.sin(timeSec * 2 + i) * 14) % ARENA_WIDTH;
       const ey = GROUND_Y - ((i * 29 + timeSec * 32) % GROUND_Y);
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 2);
     }
+  } else if (activeBgId === 'mirewood') {
+    for (let i = 0; i < 12; i++) {
+      const fx = (i * 67 + Math.sin(timeSec * 1.4 + i) * 18) % ARENA_WIDTH;
+      const fy = 95 + Math.cos(timeSec * 1.8 + i * 2) * 35;
+      const alpha = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(timeSec * 4 + i));
+      ctx.fillStyle = `rgba(167, 243, 208, ${alpha.toFixed(2)})`;
+      ctx.fillRect(Math.round(fx), Math.round(fy), 2, 2);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.35)';
+    for (let i = 0; i < 8; i++) {
+      const mx = (i * 79 + timeSec * 12) % ARENA_WIDTH;
+      const my = 50 + ((i * 31 + Math.sin(timeSec + i) * 12) % 110);
+      ctx.fillRect(Math.round(mx), Math.round(my), 2, 2);
+    }
   }
 
-  // Warhorn Rally golden overlay
+  // Warhorn Rally golden overlay + rising golden sparks
   if (state.rallyTimer > 0) {
-    ctx.fillStyle = `rgba(250, 204, 21, ${(0.1 + Math.sin(timeSec * 10) * 0.04).toFixed(2)})`;
+    ctx.fillStyle = `rgba(250, 204, 21, ${(0.09 + Math.sin(timeSec * 10) * 0.04).toFixed(2)})`;
     ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.85)';
+    for (let i = 0; i < 14; i++) {
+      const rx = (i * 41 + timeSec * 18) % ARENA_WIDTH;
+      const ry = ARENA_HEIGHT - ((i * 33 + timeSec * 72) % ARENA_HEIGHT);
+      ctx.fillRect(Math.round(rx), Math.round(ry), 2, 4);
+    }
   }
 
   // 2. Active Companions (48x48 sprite sheets)
@@ -115,6 +136,19 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   ctx.beginPath();
   ctx.ellipse(HERO_X, GROUND_Y + 5, 20, 5, 0, 0, Math.PI * 2);
   ctx.stroke();
+
+  // Rank Promotion Shimmer Halo for Promoted Knights (Rank 2+)
+  if (state.claimedRank >= 2) {
+    const rankColor = state.claimedRank >= 4 ? 'rgba(250, 204, 21, 0.32)' : 'rgba(56, 189, 248, 0.25)';
+    const pulse = 24 + Math.sin(timeSec * 5) * 3;
+    const g = ctx.createRadialGradient(HERO_X, GROUND_Y - 20, 4, HERO_X, GROUND_Y - 20, pulse);
+    g.addColorStop(0, rankColor);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(HERO_X, GROUND_Y - 20, pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   if (assets.knight.complete && assets.knight.naturalWidth > 0) {
     let kFrame = 0;
@@ -247,17 +281,39 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   }
   ctx.globalAlpha = 1;
 
-  // 8. Floating Damage & Loot Numbers
+  // 8. Floating Damage & Loot Numbers with Pop-Scale Bounce!
   ctx.textAlign = 'center';
   for (const ft of state.floatingTexts) {
+    const progress = 1 - ft.life / ft.maxLife;
+    const popScale = ft.bold && progress < 0.2 ? 1.38 - (progress / 0.2) * 0.38 : 1;
+    const drawSize = Math.round(ft.size * popScale);
     ctx.globalAlpha = Math.min(1, (ft.life / ft.maxLife) * 1.5);
-    ctx.font = `${ft.bold ? '700' : '400'} ${ft.size}px Galmuri9, monospace`;
+    ctx.font = `${ft.bold ? '700' : '400'} ${drawSize}px Galmuri9, monospace`;
     ctx.fillStyle = '#090d16';
     ctx.fillText(ft.text, Math.round(ft.x) + 1, Math.round(ft.y) + 1);
     ctx.fillStyle = ft.color;
     ctx.fillText(ft.text, Math.round(ft.x), Math.round(ft.y));
   }
   ctx.globalAlpha = 1;
+
+  // 8.5 Dramatic RPG Special Cut-In Streak Banner (Warhorn / Judgment / Guard / Relic)
+  if (state.cutInTimer > 0 && state.cutInText) {
+    const t = state.cutInTimer / 0.72;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, t * 2.2);
+    ctx.fillStyle = 'rgba(7, 12, 24, 0.76)';
+    ctx.fillRect(0, 78, ARENA_WIDTH, 32);
+    ctx.fillStyle = state.cutInColor;
+    ctx.fillRect(0, 78, ARENA_WIDTH, 2);
+    ctx.fillRect(0, 108, ARENA_WIDTH, 2);
+    ctx.font = '700 13px Galmuri9, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#090d16';
+    ctx.fillText(state.cutInText, ARENA_WIDTH / 2 + 1, 99);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(state.cutInText, ARENA_WIDTH / 2, 98);
+    ctx.restore();
+  }
 
   // 9. Combo Counter (Top-Left of Arena)
   if (state.comboCount >= 3) {

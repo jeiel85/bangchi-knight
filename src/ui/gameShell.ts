@@ -1,5 +1,6 @@
 import { sfx } from '../audio/sfx';
 import {
+  ACHIEVEMENTS,
   COMPANIONS,
   DUNGEONS,
   ENEMY_CATALOG,
@@ -9,6 +10,7 @@ import {
   MAX_DUNGEON_TICKETS,
   RANKS,
   RARITY_CONFIG,
+  RELICS,
   SLOT_META,
   STANCES,
   TICKET_RECHARGE_SEC,
@@ -16,9 +18,11 @@ import {
   ZONES,
   getCompanionCost,
   getFacilityCost,
+  getMaxRelicSlots,
   getNextClaimableRank,
   getRankDef,
   getRefineCost,
+  getRelicAppraisalCost,
   getSkillUpgradeCost,
   getZoneForStage,
 } from '../engine/data';
@@ -38,6 +42,7 @@ import type {
   FacilityKey,
   ItemRarity,
   KnightSkillId,
+  RelicId,
   StanceId,
   TrainingKey,
 } from '../engine/types';
@@ -106,6 +111,12 @@ function skillDungeonIcon(index: number, size = 24): string {
   const bgW = size * 5;
   const posX = -index * size;
   return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/skills-dungeons.png');background-size:${bgW}px ${size}px;background-position:${posX}px 0;" aria-hidden="true"></span>`;
+}
+
+function relicIcon(index: number, size = 28): string {
+  const bgW = size * 6;
+  const posX = -index * size;
+  return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/relics-sheet.png');background-size:${bgW}px ${size}px;background-position:${posX}px 0;" aria-hidden="true"></span>`;
 }
 
 function equipTierIcon(slot: EquipSlot, rarity: ItemRarity, size = 34): string {
@@ -261,8 +272,17 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           <button class="nav-tab" data-tab="squad">${pxIcon('weapon', 19)}<span>원정대</span></button>
           <button class="nav-tab" data-tab="dungeon">${skillDungeonIcon(4, 19)}<span>던전</span><em class="nav-dot hidden" id="dot-dungeon"></em></button>
           <button class="nav-tab" data-tab="kingdom">${pxIcon('medal', 19)}<span>왕국</span><em class="nav-dot hidden" id="dot-kingdom"></em></button>
-          <button class="nav-tab" data-tab="journal">${pxIcon('shield', 19)}<span>원정일지</span></button>
+          <button class="nav-tab" data-tab="journal">${pxIcon('shield', 19)}<span>원정일지</span><em class="nav-dot hidden" id="dot-journal"></em></button>
         </nav>
+
+        <div class="title-curtain" id="title-curtain">
+          <img class="curtain-emblem" src="./assets/ui/title-emblem.png" alt="방치 나이트 문장" width="220" height="73" />
+          <div class="curtain-sub">16-BIT PIXEL EXPEDITION RPG</div>
+          <h2 class="curtain-title">방치 나이트</h2>
+          <div class="curtain-save-chip" id="curtain-save-chip"></div>
+          <button class="btn btn-amber btn-lg curtain-start-btn" id="curtain-start-btn">▶ 원정 출정하기</button>
+          <div class="curtain-keys">단축키: 1·2·3 진형 · Q·W·E 스킬 · Space 진격나팔 · F 단조</div>
+        </div>
 
         <div class="modal-backdrop hidden" id="forge-modal">
           <div class="modal-card" id="forge-modal-content"></div>
@@ -309,8 +329,66 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   const worldmapModal = root.querySelector<HTMLElement>('#worldmap-modal')!;
   const worldmapContent = root.querySelector<HTMLElement>('#worldmap-content')!;
   const confirmModal = root.querySelector<HTMLElement>('#confirm-modal')!;
+  const titleCurtain = root.querySelector<HTMLElement>('#title-curtain')!;
   const toastEl = root.querySelector<HTMLElement>('#toast-pill')!;
   const cpDeltaEl = root.querySelector<HTMLElement>('#cp-delta-toast')!;
+
+  // Populate Opening Title Curtain summary
+  {
+    const st = engine.computeStats();
+    const z = getZoneForStage(engine.state.stage);
+    const chip = root.querySelector('#curtain-save-chip')!;
+    chip.textContent =
+      engine.state.totalKills > 0
+        ? `이어하기 · ${st.rankTitle} · STAGE ${engine.state.stage} (${z.name}) · CP ${fmtNum(st.cp)}`
+        : '새로운 왕국 원정 · 여명의 초원 출정 준비 완료';
+  }
+
+  function dismissCurtain(): void {
+    if (titleCurtain.classList.contains('hidden')) return;
+    sfx.unlock();
+    titleCurtain.classList.add('fade-out');
+    setTimeout(() => {
+      titleCurtain.classList.add('hidden');
+      renderOfflineModalIfNeeded();
+    }, 220);
+  }
+
+  root.querySelector('#curtain-start-btn')?.addEventListener('click', dismissCurtain);
+  titleCurtain.addEventListener('click', (ev) => {
+    if (ev.target === titleCurtain) dismissCurtain();
+  });
+
+  // Desktop keyboard shortcuts (1/2/3 stances, Q/W/E skills, Space rally, F forge)
+  const onKeyDown = (ev: KeyboardEvent) => {
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) return;
+    if (!titleCurtain.classList.contains('hidden')) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        dismissCurtain();
+      }
+      return;
+    }
+    const k = ev.key.toLowerCase();
+    if (k === '1') { sfx.unlock(); engine.setStance('vanguard'); updateStanceButtons(); }
+    else if (k === '2') { sfx.unlock(); engine.setStance('bulwark'); updateStanceButtons(); }
+    else if (k === '3') { sfx.unlock(); engine.setStance('plunder'); updateStanceButtons(); }
+    else if (k === 'q') { sfx.unlock(); engine.castSkill('whirlwind'); }
+    else if (k === 'w') { sfx.unlock(); engine.castSkill('judgment'); }
+    else if (k === 'e') { sfx.unlock(); engine.castSkill('oath'); }
+    else if (k === ' ') {
+      ev.preventDefault();
+      sfx.unlock();
+      engine.triggerRally();
+    } else if (k === 'f' && !engine.state.pendingForgeItem) {
+      sfx.unlock();
+      if (engine.forgeEquipment(false)) {
+        renderForgeModal();
+        renderTab();
+      }
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
 
   let toastTimer: number | null = null;
   let cpDeltaTimer: number | null = null;
@@ -560,6 +638,25 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         checkCpDelta();
         renderTab();
         showToast(`👑 [${engine.computeStats().rankTitle}] 승급 완료!`);
+      }
+    } else if (action === 'appraise-relic') {
+      const gained = engine.appraiseRelic();
+      if (gained) {
+        const def = RELICS.find((r) => r.id === gained)!;
+        checkCpDelta();
+        renderTab();
+        showToast(`🔮 유물 [${def.name}] 해금!`);
+      }
+    } else if (action === 'toggle-relic') {
+      const id = btn.dataset.key as RelicId;
+      if (engine.toggleEquipRelic(id)) {
+        checkCpDelta();
+        renderTab();
+      }
+    } else if (action === 'claim-achievement') {
+      if (engine.claimAchievement(btn.dataset.key!)) {
+        renderTab();
+        showToast('🏆 업적 보상을 수령했습니다!');
       }
     } else if (action === 'buy-facility') {
       if (engine.buyFacility(btn.dataset.key as FacilityKey)) {
@@ -1003,12 +1100,16 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
       const curRank = getRankDef(s.claimedRank);
       const claimableRank = getNextClaimableRank(s.claimedRank, s.highestStage);
       const nextRank = RANKS[s.claimedRank + 1];
+      const maxRelicSlots = getMaxRelicSlots(s.claimedRank);
+      const relicCost = getRelicAppraisalCost(s.unlockedRelics.length);
+      const allRelicsUnlocked = s.unlockedRelics.length >= RELICS.length;
+      const canAppraise = !allRelicsUnlocked && s.medals >= relicCost;
 
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
-            <h4>왕국 본부 · 승급 · 영구 시설</h4>
-            <p>계급 승급과 영구 시설로 원정대 기본 화력을 극대화하세요</p>
+            <h4>왕국 본부 · 승급 · 유물 · 시설</h4>
+            <p>유물 시너지 빌드와 영구 시설로 나만의 원정대를 완성하세요</p>
           </div>
           <span class="medal-badge inline-flex">${pxIcon('medal', 14)} ${fmtNum(s.medals)}</span>
         </div>
@@ -1031,6 +1132,43 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
               ? `<button class="btn btn-amber btn-sm" data-action="claim-rank">승급 수령!</button>`
               : ''
           }
+        </div>
+
+        <div class="relic-panel">
+          <div class="relic-header">
+            <div>
+              <div class="sub-label" style="margin:0">🔮 원정 유물 빌드 (${s.equippedRelics.length}/${maxRelicSlots} 장착)</div>
+              <small class="relic-sub">해금한 유물을 클릭해 장착/해제 (정예기사 승급 시 3슬롯)</small>
+            </div>
+            <button class="btn btn-sm ${canAppraise ? 'btn-amber' : 'btn-muted'}" data-action="appraise-relic" ${canAppraise ? '' : 'disabled'}>
+              ${allRelicsUnlocked ? '모두 해금' : `유물 감정 🏅${relicCost}`}
+            </button>
+          </div>
+          <div class="relic-grid">
+            ${RELICS.map((r) => {
+              const unlocked = s.unlockedRelics.includes(r.id);
+              const equipped = s.equippedRelics.includes(r.id);
+              return `
+                <button
+                  class="relic-card ${unlocked ? 'unlocked' : 'locked'} ${equipped ? 'equipped' : ''}"
+                  style="--relic-color:${r.color}"
+                  data-action="toggle-relic"
+                  data-key="${r.id}"
+                  ${unlocked ? '' : 'disabled'}
+                  title="${r.desc}"
+                >
+                  <div class="relic-top">
+                    <span class="relic-icon-wrap">${relicIcon(r.iconIndex, 28)}</span>
+                    <div class="relic-meta">
+                      <span class="relic-name">${unlocked ? r.name : '??? 유물'}</span>
+                      <span class="relic-tag">${equipped ? '장착중' : unlocked ? r.tag : '미감정'}</span>
+                    </div>
+                  </div>
+                  <p class="relic-desc">${unlocked ? r.desc : '훈장으로 유물 감정을 진행해 해금하세요.'}</p>
+                </button>
+              `;
+            }).join('')}
+          </div>
         </div>
 
         <div class="return-card">
@@ -1119,6 +1257,31 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           <div class="stat-cell"><span>원정 시간</span><strong>${fmtTime(s.totalPlaySeconds)}</strong></div>
         </div>
 
+        <div class="sub-label">🏆 원정 업적 트로피 (${s.claimedAchievements.length}/${ACHIEVEMENTS.length})</div>
+        <div class="achieve-list">
+          ${ACHIEVEMENTS.map((a) => {
+            const claimed = s.claimedAchievements.includes(a.id);
+            const prog = Math.min(a.target, engine.getAchievementProgress(a.id));
+            const ready = !claimed && prog >= a.target;
+            return `
+              <div class="achieve-row ${claimed ? 'claimed' : ready ? 'ready' : ''}">
+                <div class="achieve-info">
+                  <div class="achieve-title">${a.title} <small>(${prog}/${a.target})</small></div>
+                  <div class="achieve-desc">${a.desc} · 보상 🏅+${a.rewardMedals} ⛏️+${a.rewardOre}</div>
+                </div>
+                <button
+                  class="btn btn-sm ${ready ? 'btn-amber' : 'btn-muted'}"
+                  data-action="claim-achievement"
+                  data-key="${a.id}"
+                  ${ready ? '' : 'disabled'}
+                >
+                  ${claimed ? '완료' : ready ? '수령' : '진행중'}
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
         <div class="save-actions">
           <button class="btn btn-ghost btn-sm" data-action="export-save">📋 코드 백업</button>
           <button class="btn btn-ghost btn-sm" data-action="import-save">📥 코드 복원</button>
@@ -1194,6 +1357,12 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     root.querySelector('#dot-dungeon')!.classList.toggle('hidden', !hasTickets || Boolean(s.activeDungeon));
     const hasRankPromo = Boolean(getNextClaimableRank(s.claimedRank, s.highestStage));
     root.querySelector('#dot-kingdom')!.classList.toggle('hidden', !hasRankPromo);
+    const hasAchieve = engine.getClaimableAchievementCount() > 0;
+    root.querySelector('#dot-journal')!.classList.toggle('hidden', !hasAchieve);
+
+    // Dynamic Boss/Dungeon BGM mood
+    const intense = Boolean(s.activeDungeon) || s.enemies.some((e) => e.isBoss);
+    sfx.setBgmMood(intense ? 'boss' : 'normal');
 
     updateQuestBar();
     updateStanceButtons();
@@ -1252,7 +1421,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   updateQuickButtons();
   renderTab();
   updateHud();
-  renderOfflineModalIfNeeded();
+  // Offline loot modal opens cleanly once the Title Curtain is dismissed!
 
   let rafId = 0;
   let lastFrame = performance.now();
@@ -1292,6 +1461,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   return () => {
     cancelAnimationFrame(rafId);
     sfx.setBgm(false);
+    window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('beforeunload', onUnload);
     writeSaveData(engine.toSaveData());
   };

@@ -1,10 +1,12 @@
 import {
+  ACHIEVEMENTS,
   COMPANIONS,
   DUNGEONS,
   FACILITIES,
   KNIGHT_SKILLS,
   MAX_DUNGEON_TICKETS,
   RARITY_CONFIG,
+  RELICS,
   STANCES,
   TICKET_RECHARGE_SEC,
   TRAININGS,
@@ -15,10 +17,12 @@ import {
   getForgeLevel,
   getForgeOreCost,
   getKnightRankTitle,
+  getMaxRelicSlots,
   getNextClaimableRank,
   getQuestDef,
   getRankDef,
   getRefineCost,
+  getRelicAppraisalCost,
   getSkillUpgradeCost,
   getTrainingCost,
   getZoneForStage,
@@ -38,6 +42,7 @@ import type {
   GameState,
   KnightSkillId,
   QuestDef,
+  RelicId,
   SaveData,
   StanceId,
   TrainingKey,
@@ -139,6 +144,9 @@ export class BangchiEngine {
       dungeonResult: null,
 
       claimedRank: saved?.claimedRank ?? 0,
+      unlockedRelics: Array.isArray(saved?.unlockedRelics) ? [...saved.unlockedRelics] : [],
+      equippedRelics: Array.isArray(saved?.equippedRelics) ? [...saved.equippedRelics] : [],
+      claimedAchievements: Array.isArray(saved?.claimedAchievements) ? [...saved.claimedAchievements] : [],
       questIndex: saved?.questIndex ?? 0,
       questBaseline: saved?.questBaseline ?? 0,
       discoveredEnemies: Array.isArray(saved?.discoveredEnemies) ? [...saved.discoveredEnemies] : [],
@@ -162,6 +170,12 @@ export class BangchiEngine {
       morale: this.demoMode ? 65 : 20,
       rallyTimer: 0,
       guardBurstTimer: 0,
+      hitStopTimer: 0,
+      cutInTimer: 0,
+      cutInText: '',
+      cutInColor: '#facc15',
+      hitCounter: 0,
+      dustTimer: 0,
       autoForgeTimer: 0,
       screenShake: 0,
       bannerText: '',
@@ -253,6 +267,101 @@ export class BangchiEngine {
     this.events.push({ type });
   }
 
+  public hasRelic(id: RelicId): boolean {
+    return this.state.equippedRelics.includes(id);
+  }
+
+  public appraiseRelic(): RelicId | null {
+    const s = this.state;
+    const locked = RELICS.filter((r) => !s.unlockedRelics.includes(r.id));
+    if (locked.length === 0) return null;
+    const cost = getRelicAppraisalCost(s.unlockedRelics.length);
+    if (s.medals < cost) return null;
+    s.medals -= cost;
+    const picked = locked[Math.floor(Math.random() * locked.length)];
+    s.unlockedRelics.push(picked.id);
+    if (s.equippedRelics.length < getMaxRelicSlots(s.claimedRank)) {
+      s.equippedRelics.push(picked.id);
+    }
+    this.triggerCutIn(`🔮 유물 감정 · ${picked.name}!`, picked.color);
+    this.emit('forgeRare');
+    return picked.id;
+  }
+
+  public toggleEquipRelic(id: RelicId): boolean {
+    const s = this.state;
+    if (!s.unlockedRelics.includes(id)) return false;
+    const idx = s.equippedRelics.indexOf(id);
+    if (idx >= 0) {
+      s.equippedRelics.splice(idx, 1);
+      this.emit('upgrade');
+      return true;
+    }
+    const maxSlots = getMaxRelicSlots(s.claimedRank);
+    if (s.equippedRelics.length >= maxSlots) {
+      s.equippedRelics.shift();
+    }
+    s.equippedRelics.push(id);
+    const stats = this.computeStats();
+    s.heroMaxHp = stats.maxHp;
+    this.emit('upgrade');
+    return true;
+  }
+
+  public getAchievementProgress(id: string): number {
+    const s = this.state;
+    switch (id) {
+      case 'first_boss': return s.totalBossKills;
+      case 'forge_20': return s.totalForges;
+      case 'refine_8': return s.totalRefines;
+      case 'full_squad':
+        return (
+          (s.companions.ranger > 0 ? 1 : 0) +
+          (s.companions.pyro > 0 ? 1 : 0) +
+          (s.companions.banneret > 0 ? 1 : 0)
+        );
+      case 'guard_2': return s.totalPerfectGuards;
+      case 'dungeon_3': return s.totalDungeonClears;
+      case 'epic_gear': {
+        const eq = [s.equipment.weapon, s.equipment.shield, s.equipment.armor];
+        return eq.some((it) => RARITY_CONFIG[it.rarity].rank >= 3) ? 1 : 0;
+      }
+      case 'codex_6': return s.discoveredEnemies.length + s.discoveredBosses.length;
+      case 'kills_250': return s.totalKills;
+      case 'stage_7': return s.highestStage;
+      default: return 0;
+    }
+  }
+
+  public getClaimableAchievementCount(): number {
+    let cnt = 0;
+    for (const a of ACHIEVEMENTS) {
+      if (!this.state.claimedAchievements.includes(a.id) && this.getAchievementProgress(a.id) >= a.target) {
+        cnt += 1;
+      }
+    }
+    return cnt;
+  }
+
+  public claimAchievement(id: string): boolean {
+    const def = ACHIEVEMENTS.find((a) => a.id === id);
+    if (!def || this.state.claimedAchievements.includes(id)) return false;
+    if (this.getAchievementProgress(id) < def.target) return false;
+    this.state.claimedAchievements.push(id);
+    this.state.medals += def.rewardMedals;
+    this.state.ore += def.rewardOre;
+    this.state.bannerText = `🏆 업적 달성 · ${def.title} (🏅+${def.rewardMedals}, ⛏️+${def.rewardOre})`;
+    this.state.bannerTimer = 2.2;
+    this.emit('questClaim');
+    return true;
+  }
+
+  private triggerCutIn(text: string, color: string): void {
+    this.state.cutInText = text;
+    this.state.cutInColor = color;
+    this.state.cutInTimer = 0.72;
+  }
+
   public getActiveStance() {
     return STANCES.find((st) => st.id === this.state.stance) ?? STANCES[0];
   }
@@ -298,31 +407,35 @@ export class BangchiEngine {
     const rallyApsMult = s.rallyTimer > 0 ? 1.4 : 1;
     const oathCritBonus = s.oathBuffTimer > 0 ? 0.4 : 0;
     const oathApsMult = s.oathBuffTimer > 0 ? 1.28 : 1;
+    const compassApsMult = this.hasRelic('stormCompass') ? 1.18 : 1;
+    const citadelHpMult = this.hasRelic('citadelHeart') ? 1.35 : 1;
+    const diceLootMult = this.hasRelic('goldenDice') ? 1.45 : 1;
+    const crownSquadMult = this.hasRelic('sovereignCrown') ? 1.6 : 1;
 
     const weaponAtk = this.getEffectiveEquipPower('weapon');
     const baseAtk = 10 + weaponAtk + s.training.swordplay * 5;
     const atk = baseAtk * academyMult * (1 + codexAtkBonus) * (1 + rankAtkBonus) * stance.atkMult * rallyAtkMult;
 
-    const aps = 1.12 * (1 + bonusSpeed) * stance.apsMult * rallyApsMult * oathApsMult;
+    const aps = 1.12 * (1 + bonusSpeed) * stance.apsMult * rallyApsMult * oathApsMult * compassApsMult;
     const critChance = Math.min(0.95, 0.1 + s.training.swordplay * 0.006 + bonusCrit + oathCritBonus);
     const critMult = 1.75;
 
     const shieldHp = this.getEffectiveEquipPower('shield');
-    const maxHp = Math.round((135 + shieldHp + s.training.fortitude * 32) * (1 + bonusHp));
+    const maxHp = Math.round((135 + shieldHp + s.training.fortitude * 32) * (1 + bonusHp) * citadelHpMult);
     const def = this.getEffectiveEquipPower('armor');
     const regenPerSec = 2.6 + s.training.fortitude * 2.2 + maxHp * 0.006;
 
-    const goldMult = (1 + s.training.logistics * 0.15 + bonusGold) * stance.lootMult * supplyMult;
-    const oreMult = (1 + s.training.logistics * 0.12 + traitOreBonus) * stance.lootMult * supplyMult;
+    const goldMult = (1 + s.training.logistics * 0.15 + bonusGold) * stance.lootMult * supplyMult * diceLootMult;
+    const oreMult = (1 + s.training.logistics * 0.12 + traitOreBonus) * stance.lootMult * supplyMult * diceLootMult;
 
     const heroDps = atk * (1 - critChance + critChance * critMult) * aps * (1 + doubleStrikeChance * 0.75);
     const rangerDps =
       s.companions.ranger > 0
-        ? (atk * (0.48 + s.companions.ranger * 0.16)) / COMPANIONS[0].interval
+        ? (atk * (0.48 + s.companions.ranger * 0.16) * crownSquadMult) / COMPANIONS[0].interval
         : 0;
     const pyroDps =
       s.companions.pyro > 0
-        ? (atk * (0.95 + s.companions.pyro * 0.28) * 1.6) / COMPANIONS[1].interval
+        ? (atk * (0.95 + s.companions.pyro * 0.28) * 1.6 * crownSquadMult) / COMPANIONS[1].interval
         : 0;
     const skillBonusDps =
       (atk * (2.4 + s.skillLevels.whirlwind * 0.22)) / 6 +
@@ -363,13 +476,15 @@ export class BangchiEngine {
 
     const stats = this.computeStats();
     const lv = s.skillLevels[skillId];
-    s.skillCooldowns[skillId] = def.cooldown;
+    const cdMult = this.hasRelic('stormCompass') ? 0.78 : 1;
+    s.skillCooldowns[skillId] = def.cooldown * cdMult;
     s.heroAction = 'swing';
     s.heroActionTimer = 0.28;
 
     if (skillId === 'whirlwind') {
       const mult = 2.4 + (lv - 1) * 0.25;
       s.screenShake = 5;
+      s.hitStopTimer = 0.032;
       this.spawnVfx(0, HERO_X + 44, GROUND_Y - 22, 1.35, 0.35);
       for (const e of s.enemies) {
         if (e.x - HERO_X < 210) {
@@ -387,6 +502,8 @@ export class BangchiEngine {
         this.spawnVfx(3, front.x, GROUND_Y - 30, 1.25, 0.52);
         this.damageEnemy(front, stats.atk * mult * (front.isBoss ? stats.bossDmgMult : 1), true, '#38bdf8');
         this.spawnText(front.x, GROUND_Y - 68, '⚡ 왕국의 심판!', '#38bdf8', 11, true);
+        this.triggerCutIn('⚡ 왕국의 심판!', '#38bdf8');
+        s.hitStopTimer = 0.045;
         s.screenShake = 7;
       }
       this.addMorale(10);
@@ -661,7 +778,7 @@ export class BangchiEngine {
   public toSaveData(): SaveData {
     const s = this.state;
     return {
-      version: 4,
+      version: 5,
       stage: s.stage,
       highestStage: s.highestStage,
       wave: s.wave,
@@ -685,6 +802,9 @@ export class BangchiEngine {
       dungeonTiers: { ...s.dungeonTiers },
       ticketRechargeTimer: Math.floor(s.ticketRechargeTimer),
       claimedRank: s.claimedRank,
+      unlockedRelics: [...s.unlockedRelics],
+      equippedRelics: [...s.equippedRelics],
+      claimedAchievements: [...s.claimedAchievements],
       questIndex: s.questIndex,
       questBaseline: s.questBaseline,
       discoveredEnemies: [...s.discoveredEnemies],
@@ -744,7 +864,9 @@ export class BangchiEngine {
       this.addMorale(24);
       this.state.totalPerfectGuards += 1;
       this.state.guardBurstTimer = 0.55;
+      this.state.hitStopTimer = 0.055;
       this.state.screenShake = 6;
+      this.triggerCutIn('🛡️ 철벽 완벽 방어!', '#38bdf8');
       this.damageEnemy(chargingBoss, stats.atk * 2.2, true, '#38bdf8');
       this.spawnVfx(3, HERO_X, GROUND_Y - 24, 1.0, 0.5);
       this.spawnText(HERO_X, GROUND_Y - 62, '철벽 완벽 방어!', '#38bdf8', 12, true);
@@ -765,7 +887,9 @@ export class BangchiEngine {
     if (s.morale < 100 || s.rallyTimer > 0) return false;
     s.rallyTimer = 9.0;
     s.totalRallies += 1;
+    s.hitStopTimer = 0.05;
     s.screenShake = 6;
+    this.triggerCutIn('🎺 진격 나팔! 전군 돌격!', '#facc15');
     s.bannerText = '🎺 진격 나팔! 전군 돌격 개시!';
     s.bannerTimer = 2.0;
 
@@ -963,10 +1087,19 @@ export class BangchiEngine {
     const s = this.state;
 
     s.totalPlaySeconds += rawDt;
-    s.animTime += dt;
     s.screenShake = Math.max(0, s.screenShake - rawDt * 22);
     s.guardBurstTimer = Math.max(0, s.guardBurstTimer - rawDt);
+    if (s.cutInTimer > 0) s.cutInTimer = Math.max(0, s.cutInTimer - rawDt);
     if (s.bannerTimer > 0) s.bannerTimer = Math.max(0, s.bannerTimer - rawDt);
+
+    // Hit-stop micro-freeze for crisp action impact!
+    if (s.hitStopTimer > 0) {
+      s.hitStopTimer = Math.max(0, s.hitStopTimer - rawDt);
+      this.tickParticlesAndTexts(rawDt * 0.35);
+      return;
+    }
+
+    s.animTime += dt;
     if (s.oathBuffTimer > 0) s.oathBuffTimer = Math.max(0, s.oathBuffTimer - dt);
     if (s.comboTimer > 0) {
       s.comboTimer -= rawDt;
@@ -1055,6 +1188,20 @@ export class BangchiEngine {
     if (!inCombat) {
       const speed = (s.stance === 'plunder' ? 112 : 90) * (s.rallyTimer > 0 ? 1.25 : 1);
       s.scrollX += speed * dt;
+      s.dustTimer -= dt;
+      if (s.dustTimer <= 0) {
+        s.dustTimer = 0.16;
+        s.particles.push({
+          x: HERO_X - 10 + (Math.random() - 0.5) * 6,
+          y: GROUND_Y + 2,
+          vx: -24 - Math.random() * 14,
+          vy: -14 - Math.random() * 14,
+          size: 3,
+          color: '#cbd5e1',
+          life: 0.35,
+          maxLife: 0.35,
+        });
+      }
       for (const e of s.enemies) {
         e.x -= speed * dt;
         e.animTime += dt;
@@ -1136,6 +1283,7 @@ export class BangchiEngine {
   private tickCompanions(dt: number, stats: ComputedStats): void {
     const s = this.state;
     const speedBoost = s.rallyTimer > 0 ? 1.45 : 1;
+    const crownMult = this.hasRelic('sovereignCrown') ? 1.6 : 1;
 
     s.companionCastTimers.ranger = Math.max(0, s.companionCastTimers.ranger - dt);
     s.companionCastTimers.pyro = Math.max(0, s.companionCastTimers.pyro - dt);
@@ -1146,7 +1294,7 @@ export class BangchiEngine {
       if (s.companionTimers.ranger <= 0) {
         s.companionTimers.ranger = COMPANIONS[0].interval;
         s.companionCastTimers.ranger = 0.42;
-        const dmg = stats.atk * (0.48 + s.companions.ranger * 0.16);
+        const dmg = stats.atk * (0.48 + s.companions.ranger * 0.16) * crownMult;
         s.projectiles.push({
           id: this.nextId++,
           kind: 'arrow',
@@ -1167,7 +1315,7 @@ export class BangchiEngine {
       if (s.companionTimers.pyro <= 0) {
         s.companionTimers.pyro = COMPANIONS[1].interval;
         s.companionCastTimers.pyro = 0.5;
-        const dmg = stats.atk * (0.95 + s.companions.pyro * 0.28);
+        const dmg = stats.atk * (0.95 + s.companions.pyro * 0.28) * crownMult;
         s.projectiles.push({
           id: this.nextId++,
           kind: 'fireball',
@@ -1188,9 +1336,9 @@ export class BangchiEngine {
       if (s.companionTimers.banneret <= 0) {
         s.companionTimers.banneret = COMPANIONS[2].interval;
         s.companionCastTimers.banneret = 0.6;
-        const healAmt = Math.round(stats.maxHp * (0.07 + s.companions.banneret * 0.015));
+        const healAmt = Math.round(stats.maxHp * (0.07 + s.companions.banneret * 0.015) * crownMult);
         s.heroHp = Math.min(stats.maxHp, s.heroHp + healAmt);
-        this.addMorale(8 + s.companions.banneret * 1.5);
+        this.addMorale((8 + s.companions.banneret * 1.5) * (crownMult > 1 ? 1.25 : 1));
         this.spawnText(HERO_X, GROUND_Y - 52, `+${healAmt}`, '#4ade80', 10, true);
         this.spawnBurst(HERO_X - 96, GROUND_Y - 28, '#fde047', 6);
         this.emit('heal');
@@ -1239,14 +1387,33 @@ export class BangchiEngine {
     const s = this.state;
     s.heroAction = 'swing';
     s.heroActionTimer = Math.min(0.24, 0.7 / stats.aps);
+    s.hitCounter += 1;
 
     const isCrit = Math.random() < stats.critChance;
     let dmg = stats.atk * (0.93 + Math.random() * 0.14);
     if (isCrit) dmg *= stats.critMult;
     if (target.isBoss) dmg *= stats.bossDmgMult;
+    if (this.hasRelic('frostSeal') && target.stunTimer > 0) dmg *= 1.4;
 
     this.damageEnemy(target, dmg, isCrit, isCrit ? '#facc15' : '#ffffff');
     this.spawnVfx(isCrit ? 1 : 0, target.x - 8, GROUND_Y - (target.isBoss ? 30 : 20), isCrit ? 0.85 : 0.72, 0.24);
+    if (isCrit) s.hitStopTimer = Math.max(s.hitStopTimer, 0.022);
+
+    // Relic: Phoenix Plume AoE Crit Fire Explosion
+    if (isCrit && this.hasRelic('phoenixPlume') && Math.random() < 0.35) {
+      this.spawnVfx(2, target.x, GROUND_Y - 22, 1.1, 0.32);
+      for (const e of s.enemies) {
+        if (e.hp > 0) this.damageEnemy(e, stats.atk * 0.7, false, '#fb923c');
+      }
+      this.spawnText(target.x, GROUND_Y - 56, '🔥 불사조 폭발!', '#fb923c', 10, true);
+    }
+
+    // Relic: Frost King Seal 5th-hit Freeze
+    if (this.hasRelic('frostSeal') && s.hitCounter % 5 === 0 && target.hp > 0) {
+      target.stunTimer = Math.max(target.stunTimer, 1.2);
+      this.spawnBurst(target.x, GROUND_Y - 22, '#7dd3fc', 10);
+      this.spawnText(target.x, GROUND_Y - 54, '❄️ 빙결!', '#7dd3fc', 10, true);
+    }
 
     if (stats.lifesteal > 0) {
       s.heroHp = Math.min(stats.maxHp, s.heroHp + dmg * stats.lifesteal);
@@ -1303,6 +1470,12 @@ export class BangchiEngine {
       this.spawnText(HERO_X, GROUND_Y - 46, isHeavy ? `강타 -${dmg}!` : `-${dmg}`, '#f87171', isHeavy ? 12 : 10, isHeavy);
     }
 
+    // Relic: Citadel Heart Reflect in Bulwark stance
+    if (s.stance === 'bulwark' && this.hasRelic('citadelHeart') && attacker.hp > 0) {
+      this.damageEnemy(attacker, stats.atk * 1.2, false, '#34d399');
+      this.spawnText(attacker.x, GROUND_Y - 48, '반사!', '#34d399', 9, true);
+    }
+
     if (s.heroHp <= 0) {
       if (s.activeDungeon) {
         this.finishDungeon(false);
@@ -1328,7 +1501,8 @@ export class BangchiEngine {
       s.enemies.splice(i, 1);
       s.totalKills += 1;
 
-      const goldGain = Math.max(1, Math.round(e.goldReward * stats.goldMult));
+      const isJackpot = this.hasRelic('goldenDice') && Math.random() < 0.08;
+      const goldGain = Math.max(1, Math.round(e.goldReward * stats.goldMult * (isJackpot ? 5 : 1)));
       const oreGain = Math.max(1, Math.round(e.oreReward * stats.oreMult));
 
       if (s.activeDungeon) {
@@ -1340,13 +1514,18 @@ export class BangchiEngine {
         s.ore += oreGain;
       }
 
-      this.spawnText(e.x - 8, GROUND_Y - 14, `+${goldGain}G`, '#facc15', 9);
+      if (isJackpot) {
+        this.spawnText(e.x, GROUND_Y - 46, `🎲 잭팟 +${goldGain}G!`, '#fde047', 12, true);
+      } else {
+        this.spawnText(e.x - 8, GROUND_Y - 14, `+${goldGain}G`, '#facc15', 9);
+      }
       this.spawnText(e.x + 12, GROUND_Y - 26, `+${oreGain}광석`, '#93c5fd', 9);
-      this.spawnBurst(e.x, GROUND_Y - 18, '#facc15', e.isBoss ? 20 : 8);
-      this.spawnLootDrops(e.x, e.isBoss ? 5 : 2);
+      this.spawnBurst(e.x, GROUND_Y - 18, '#facc15', e.isBoss ? 24 : 8);
+      this.spawnLootDrops(e.x, e.isBoss ? 6 : isJackpot ? 5 : 2);
 
       if (e.isBoss && !s.activeDungeon) {
         s.totalBossKills += 1;
+        s.hitStopTimer = 0.07;
         s.bannerText = `🚩 STAGE ${s.stage} 점령 완료!`;
         s.bannerTimer = 2.0;
         this.emit('bossKill');
@@ -1470,12 +1649,13 @@ export class BangchiEngine {
       id: this.nextId++,
       x,
       y,
-      vy: -34,
+      vx: (Math.random() - 0.5) * 24,
+      vy: bold ? -48 : -36,
       text,
       color,
       size,
-      life: 0.78,
-      maxLife: 0.78,
+      life: 0.8,
+      maxLife: 0.8,
       bold,
     });
   }
@@ -1551,8 +1731,10 @@ export class BangchiEngine {
     }
     for (let i = s.floatingTexts.length - 1; i >= 0; i--) {
       const ft = s.floatingTexts[i];
+      ft.x += ft.vx * dt;
+      ft.vx *= 0.92;
       ft.y += ft.vy * dt;
-      ft.vy *= 0.94;
+      ft.vy += 46 * dt;
       ft.life -= dt;
       if (ft.life <= 0) s.floatingTexts.splice(i, 1);
     }
