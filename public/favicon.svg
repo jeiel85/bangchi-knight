@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <rect width="32" height="32" rx="6" fill="#090a10"/>
+  <!-- Eclipse Moon -->
+  <rect x="18" y="4" width="10" height="10" fill="#f5b942"/>
+  <rect x="19" y="5" width="8" height="8" fill="#090a10"/>
+  <rect x="20" y="6" width="6" height="6" fill="#131625"/>
+  <!-- Pixel Sword -->
+  <rect x="7" y="21" width="3" height="3" fill="#b45309"/>
+  <rect x="9" y="19" width="3" height="3" fill="#f5b942"/>
+  <rect x="11" y="17" width="3" height="3" fill="#e2e8f0"/>
+  <rect x="13" y="15" width="3" height="3" fill="#f8fafc"/>
+  <rect x="15" y="13" width="3" height="3" fill="#e2e8f0"/>
+  <rect x="17" y="11" width="3" height="3" fill="#f8fafc"/>
+  <rect x="19" y="9" width="2" height="2" fill="#ffffff"/>
+  <rect x="6" y="17" width="2" height="2" fill="#f5b942"/>
+  <rect x="11" y="22" width="2" height="2" fill="#f5b942"/>
+  <!-- Ground glow -->
+  <rect x="4" y="27" width="24" height="2" fill="#232842"/>
+</svg>

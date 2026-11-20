@@ -1,0 +1,17 @@
+{
+  "name": "bangchi-knight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "방치 나이트 (Bangchi Knight) — 다크 판타지 픽셀 아트 방치형 로그라이트 액션 RPG (Web-First → Native)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}
