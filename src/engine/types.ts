@@ -126,6 +126,16 @@ export interface FloatingText {
   bold?: boolean;
 }
 
+export interface VfxInstance {
+  id: number;
+  cell: 0 | 1 | 2 | 3; // 0=slash, 1=crit, 2=explosion, 3=rallyBeam
+  x: number;
+  y: number;
+  scale: number;
+  life: number;
+  maxLife: number;
+}
+
 export interface Particle {
   x: number;
   y: number;
@@ -223,6 +233,7 @@ export interface GameState {
   scrollX: number;
 
   companionTimers: Record<CompanionId, number>;
+  companionCastTimers: Record<CompanionId, number>;
 
   morale: number; // 0..100
   rallyTimer: number; // >0 while Warhorn Rally is active
@@ -236,6 +247,7 @@ export interface GameState {
 
   enemies: EnemyEntity[];
   projectiles: Projectile[];
+  vfxList: VfxInstance[];
   floatingTexts: FloatingText[];
   particles: Particle[];
 

@@ -18,6 +18,29 @@ import { renderArena } from '../renderer/canvasRenderer';
 
 type TabKey = 'forge' | 'squad' | 'kingdom' | 'journal';
 
+type IconKey = 'weapon' | 'shield' | 'armor' | 'gold' | 'ore' | 'medal' | 'forge' | 'rally';
+const ICON_INDEX: Record<IconKey, number> = {
+  weapon: 0,
+  shield: 1,
+  armor: 2,
+  gold: 3,
+  ore: 4,
+  medal: 5,
+  forge: 6,
+  rally: 7,
+};
+
+function pxIcon(key: IconKey, size = 18): string {
+  const idx = ICON_INDEX[key];
+  const bgW = size * 8;
+  const posX = -idx * size;
+  return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/icons.png');background-size:${bgW}px ${size}px;background-position:${posX}px 0;" aria-hidden="true"></span>`;
+}
+
+function companionThumb(id: CompanionId): string {
+  return `<span class="companion-sprite-thumb" style="background-image:url('./assets/sprites/${id}.png');" aria-hidden="true"></span>`;
+}
+
 function fmtNum(n: number): string {
   if (!Number.isFinite(n)) return '0';
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
@@ -55,8 +78,8 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             <span class="stage-biome" id="hud-zone">여명의 초원</span>
           </div>
           <div class="currency-cluster">
-            <span class="currency gold" id="hud-gold">🪙 0</span>
-            <span class="currency ore" id="hud-ore">⛏️ 0</span>
+            <span class="currency gold">${pxIcon('gold', 15)}<span id="hud-gold">0</span></span>
+            <span class="currency ore">${pxIcon('ore', 15)}<span id="hud-ore">0</span></span>
           </div>
         </header>
 
@@ -67,10 +90,10 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
         <div class="hero-hud">
           <div class="hero-badge">
-            <span class="hero-crest">🛡️</span>
+            <img class="hero-portrait-img" src="./assets/ui/knight-portrait.png" alt="원정 기사 초상화" width="36" height="36" />
             <div>
               <div class="hero-rank" id="hud-rank">견습 원정기사</div>
-              <div class="hero-sub" id="hud-medals">🏅 훈장 0</div>
+              <div class="hero-sub">${pxIcon('medal', 12)}<span id="hud-medals">훈장 0</span></div>
             </div>
           </div>
           <div class="hero-bars">
@@ -88,7 +111,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <div class="arena-container">
           <canvas id="game-canvas" width="${ARENA_WIDTH}" height="${ARENA_HEIGHT}"></canvas>
           <button class="arena-rally-btn" id="btn-rally">
-            <span>🎺 진격 나팔</span>
+            <span class="inline-flex">${pxIcon('rally', 15)} 진격 나팔</span>
             <small id="rally-sub">20%</small>
           </button>
         </div>
@@ -115,10 +138,10 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <section class="panel-body" id="panel-body"></section>
 
         <nav class="bottom-nav">
-          <button class="nav-tab active" data-tab="forge">🔨<span>대장간</span></button>
-          <button class="nav-tab" data-tab="squad">👥<span>원정대</span></button>
-          <button class="nav-tab" data-tab="kingdom">🏰<span>왕국</span></button>
-          <button class="nav-tab" data-tab="journal">📜<span>원정일지</span></button>
+          <button class="nav-tab active" data-tab="forge">${pxIcon('forge', 20)}<span>대장간</span></button>
+          <button class="nav-tab" data-tab="squad">${pxIcon('weapon', 20)}<span>원정대</span></button>
+          <button class="nav-tab" data-tab="kingdom">${pxIcon('medal', 20)}<span>왕국</span></button>
+          <button class="nav-tab" data-tab="journal">${pxIcon('shield', 20)}<span>원정일지</span></button>
         </nav>
 
         <div class="modal-backdrop hidden" id="forge-modal">
@@ -281,7 +304,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     forgeModal.classList.remove('hidden');
     forgeModalContent.innerHTML = `
       <div class="modal-kicker">LIVE ANVIL FORGING</div>
-      <h3>${slotInfo.icon} 새로운 ${slotInfo.label} 단조 완료!</h3>
+      <h3 class="inline-flex center">${pxIcon(item.slot, 22)} 새로운 ${slotInfo.label} 단조 완료!</h3>
       <div class="compare-grid">
         <div class="item-box">
           <div class="item-tag">현재 장착</div>
@@ -300,8 +323,8 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-amber btn-sm" data-forge-choice="equip">⚔️ 장착하기 (구장비 판매)</button>
-        <button class="btn btn-ghost btn-sm" data-forge-choice="salvage">♻️ 분해 (골드·광석·숙련도)</button>
+        <button class="btn btn-amber btn-sm" data-forge-choice="equip">${pxIcon('weapon', 16)} 장착하기 (구장비 판매)</button>
+        <button class="btn btn-ghost btn-sm" data-forge-choice="salvage">${pxIcon('ore', 16)} 분해 (골드·광석·숙련도)</button>
       </div>
     `;
   }
@@ -321,14 +344,14 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             <h4>야전 대장간 · 숙련 Lv.${stats.forgeLevel}</h4>
             <p>광석으로 장비를 단조할수록 희귀·신화 확률이 올라갑니다</p>
           </div>
-          <span class="ore-badge">⛏️ ${fmtNum(s.ore)}</span>
+          <span class="ore-badge inline-flex">${pxIcon('ore', 14)}<span id="forge-ore-val">${fmtNum(s.ore)}</span></span>
         </div>
 
         <button class="anvil-cta ${canForge ? 'ready' : ''}" data-action="forge-now" ${canForge ? '' : 'disabled'}>
-          <span class="anvil-emoji">🔨</span>
+          <span class="anvil-icon-box">${pxIcon('forge', 30)}</span>
           <div class="anvil-copy">
             <strong>장비 즉시 단조하기</strong>
-            <small>소모 광석 ⛏️ ${oreCost} · 무작위 무기/방패/갑옷 제작</small>
+            <small class="inline-flex">소모 광석 ${pxIcon('ore', 13)} ${oreCost} · 무작위 무기/방패/갑옷 제작</small>
           </div>
         </button>
 
@@ -341,7 +364,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
               return `
                 <div class="equip-card" style="border-left: 3px solid ${rar.color}">
                   <div class="equip-top">
-                    <span>${meta.icon} ${meta.label}</span>
+                    <span class="inline-flex">${pxIcon(slot, 16)} ${meta.label}</span>
                     <span class="rar-chip" style="color:${rar.color}">${rar.label} · Lv.${item.level}</span>
                   </div>
                   <div class="equip-name">${item.name}</div>
@@ -356,6 +379,11 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         </div>
       `;
     } else if (activeTab === 'squad') {
+      const trainingIcons: Record<TrainingKey, IconKey> = {
+        swordplay: 'weapon',
+        fortitude: 'shield',
+        logistics: 'gold',
+      };
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
@@ -373,7 +401,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             return `
               <div class="item-row">
                 <div class="row-left">
-                  <span class="row-icon" style="border-color:${c.color}">${c.icon}</span>
+                  <span class="row-icon sprite-icon" style="border-color:${c.color}">${companionThumb(c.id)}</span>
                   <div>
                     <div class="row-title">${c.name} <span class="lv-tag">${lv === 0 ? '미영입' : `Lv.${lv}`}</span></div>
                     <div class="row-desc">${c.role} · ${c.desc}</div>
@@ -381,7 +409,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
                 </div>
                 <button class="buy-btn ${canBuy ? 'can-buy' : ''}" data-action="buy-companion" data-key="${c.id}" ${canBuy ? '' : 'disabled'}>
                   <span>${lv === 0 ? '영입' : '강화'}</span>
-                  <small>🪙 ${fmtNum(cost)}</small>
+                  <small class="inline-flex">${pxIcon('gold', 12)} ${fmtNum(cost)}</small>
                 </button>
               </div>
             `;
@@ -397,7 +425,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             return `
               <div class="item-row">
                 <div class="row-left">
-                  <span class="row-icon">${t.icon}</span>
+                  <span class="row-icon">${pxIcon(trainingIcons[t.key], 22)}</span>
                   <div>
                     <div class="row-title">${t.name} <span class="lv-tag">Lv.${lv}</span></div>
                     <div class="row-desc">${t.desc}</div>
@@ -405,7 +433,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
                 </div>
                 <button class="buy-btn ${canBuy ? 'can-buy' : ''}" data-action="buy-training" data-key="${t.key}" ${canBuy ? '' : 'disabled'}>
                   <span>훈련</span>
-                  <small>🪙 ${fmtNum(cost)}</small>
+                  <small class="inline-flex">${pxIcon('gold', 12)} ${fmtNum(cost)}</small>
                 </button>
               </div>
             `;
@@ -415,18 +443,24 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     } else if (activeTab === 'kingdom') {
       const canReturn = engine.canReturnToKingdom();
       const reward = engine.getReturnMedalReward();
+      const facIcons: Record<FacilityKey, IconKey> = {
+        royalForge: 'forge',
+        warAcademy: 'weapon',
+        supplyWagon: 'gold',
+        guildHall: 'rally',
+      };
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
             <h4>왕국 본부 &amp; 영구 시설</h4>
             <p>원정 귀환으로 획득한 훈장으로 영구 보너스를 해금합니다</p>
           </div>
-          <span class="medal-badge">🏅 ${fmtNum(s.medals)}</span>
+          <span class="medal-badge inline-flex">${pxIcon('medal', 14)} ${fmtNum(s.medals)}</span>
         </div>
 
         <div class="return-card">
           <div>
-            <div class="return-title">🏰 원정 귀환 (훈장 정산)</div>
+            <div class="return-title inline-flex">${pxIcon('medal', 15)} 원정 귀환 (훈장 정산)</div>
             <div class="return-desc">
               ${
                 canReturn
@@ -449,7 +483,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             return `
               <div class="item-row">
                 <div class="row-left">
-                  <span class="row-icon">${f.icon}</span>
+                  <span class="row-icon">${pxIcon(facIcons[f.key], 22)}</span>
                   <div>
                     <div class="row-title">${f.name} <span class="lv-tag">Lv.${lv}/${f.maxLevel}</span></div>
                     <div class="row-desc">${f.desc}</div>
@@ -457,7 +491,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
                 </div>
                 <button class="buy-btn medal-buy ${canBuy ? 'can-buy' : ''}" data-action="buy-facility" data-key="${f.key}" ${canBuy ? '' : 'disabled'}>
                   <span>${isMax ? 'MAX' : '증축'}</span>
-                  <small>${isMax ? '' : `🏅 ${cost}`}</small>
+                  <small class="inline-flex">${isMax ? '' : `${pxIcon('medal', 12)} ${cost}`}</small>
                 </button>
               </div>
             `;
@@ -503,11 +537,11 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
     root.querySelector('#hud-stage')!.textContent = `STAGE ${s.stage}-${s.wave}`;
     root.querySelector('#hud-zone')!.textContent = zone.name;
-    root.querySelector('#hud-gold')!.textContent = `🪙 ${fmtNum(s.gold)}`;
-    root.querySelector('#hud-ore')!.textContent = `⛏️ ${fmtNum(s.ore)}`;
+    root.querySelector('#hud-gold')!.textContent = fmtNum(s.gold);
+    root.querySelector('#hud-ore')!.textContent = fmtNum(s.ore);
     root.querySelector('#hud-dps')!.textContent = `DPS ${fmtNum(stats.dps)}`;
     root.querySelector('#hud-rank')!.textContent = stats.rankTitle;
-    root.querySelector('#hud-medals')!.textContent = `🏅 훈장 ${fmtNum(s.medals)} · 대장간 Lv.${stats.forgeLevel}`;
+    root.querySelector('#hud-medals')!.textContent = `훈장 ${fmtNum(s.medals)} · 대장간 Lv.${stats.forgeLevel}`;
 
     const hpPct = Math.max(0, Math.min(100, (s.heroHp / s.heroMaxHp) * 100));
     const shPct = Math.max(0, Math.min(100, (s.heroShield / s.heroMaxHp) * 100));
@@ -538,8 +572,8 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     const s = engine.state;
     if (activeTab === 'forge') {
       const btn = panelBody.querySelector<HTMLButtonElement>('[data-action="forge-now"]');
-      const oreBadge = panelBody.querySelector('.ore-badge');
-      if (oreBadge) oreBadge.textContent = `⛏️ ${fmtNum(s.ore)}`;
+      const oreVal = panelBody.querySelector('#forge-ore-val');
+      if (oreVal) oreVal.textContent = fmtNum(s.ore);
       if (btn) {
         const can = s.ore >= engine.getForgeCost() && !s.pendingForgeItem;
         btn.disabled = !can;

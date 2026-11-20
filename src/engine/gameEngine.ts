@@ -103,6 +103,7 @@ export class BangchiEngine {
       scrollX: 0,
 
       companionTimers: { ranger: 0.4, pyro: 1.0, banneret: 1.6 },
+      companionCastTimers: { ranger: 0, pyro: 0, banneret: 0 },
 
       morale: this.demoMode ? 65 : 20,
       rallyTimer: 0,
@@ -116,6 +117,7 @@ export class BangchiEngine {
 
       enemies: [],
       projectiles: [],
+      vfxList: [],
       floatingTexts: [],
       particles: [],
 
@@ -269,6 +271,7 @@ export class BangchiEngine {
     const stats = this.computeStats();
     s.heroHp = Math.min(stats.maxHp, s.heroHp + stats.maxHp * 0.25);
     s.heroShield = Math.max(s.heroShield, Math.round(stats.maxHp * 0.25));
+    this.spawnVfx(3, HERO_X, GROUND_Y - 26, 1.35, 0.72);
     for (const enemy of s.enemies) {
       this.damageEnemy(enemy, stats.atk * 2.4, true, '#fde047');
     }
@@ -490,17 +493,23 @@ export class BangchiEngine {
     const s = this.state;
     const speedBoost = s.rallyTimer > 0 ? 1.45 : 1;
 
+    // Decay companion cast animations
+    s.companionCastTimers.ranger = Math.max(0, s.companionCastTimers.ranger - dt);
+    s.companionCastTimers.pyro = Math.max(0, s.companionCastTimers.pyro - dt);
+    s.companionCastTimers.banneret = Math.max(0, s.companionCastTimers.banneret - dt);
+
     // 1. Ranger shoots arrows
     if (s.companions.ranger > 0 && s.enemies.length > 0) {
       s.companionTimers.ranger -= dt * speedBoost;
       if (s.companionTimers.ranger <= 0) {
         s.companionTimers.ranger = COMPANIONS[0].interval;
+        s.companionCastTimers.ranger = 0.42;
         const dmg = stats.atk * (0.48 + s.companions.ranger * 0.16);
         s.projectiles.push({
           id: this.nextId++,
           kind: 'arrow',
-          x: HERO_X - 38,
-          y: GROUND_Y - 22,
+          x: HERO_X - 36,
+          y: GROUND_Y - 20,
           vx: 260,
           vy: 0,
           damage: dmg,
@@ -516,12 +525,13 @@ export class BangchiEngine {
       s.companionTimers.pyro -= dt * speedBoost;
       if (s.companionTimers.pyro <= 0) {
         s.companionTimers.pyro = COMPANIONS[1].interval;
+        s.companionCastTimers.pyro = 0.5;
         const dmg = stats.atk * (0.95 + s.companions.pyro * 0.28);
         s.projectiles.push({
           id: this.nextId++,
           kind: 'fireball',
-          x: HERO_X - 70,
-          y: GROUND_Y - 28,
+          x: HERO_X - 66,
+          y: GROUND_Y - 26,
           vx: 185,
           vy: -16,
           damage: dmg,
@@ -537,6 +547,7 @@ export class BangchiEngine {
       s.companionTimers.banneret -= dt * speedBoost;
       if (s.companionTimers.banneret <= 0) {
         s.companionTimers.banneret = COMPANIONS[2].interval;
+        s.companionCastTimers.banneret = 0.6;
         const healAmt = Math.round(stats.maxHp * (0.07 + s.companions.banneret * 0.015));
         s.heroHp = Math.min(stats.maxHp, s.heroHp + healAmt);
         this.addMorale(8 + s.companions.banneret * 1.5);
@@ -564,6 +575,7 @@ export class BangchiEngine {
               this.damageEnemy(e, p.damage, false, '#fb923c');
             }
           }
+          this.spawnVfx(2, hitEnemy.x, GROUND_Y - 24, 1.0, 0.32);
           this.spawnBurst(hitEnemy.x, GROUND_Y - 22, '#f97316', 12);
           s.screenShake = Math.max(s.screenShake, 3);
         } else {
@@ -590,6 +602,7 @@ export class BangchiEngine {
     if (isCrit) dmg *= stats.critMult;
 
     this.damageEnemy(target, dmg, isCrit, isCrit ? '#facc15' : '#ffffff');
+    this.spawnVfx(isCrit ? 1 : 0, target.x - 8, GROUND_Y - (target.isBoss ? 30 : 20), isCrit ? 0.85 : 0.72, 0.24);
     this.addMorale(5.5);
     this.emit(isCrit ? 'crit' : 'hit');
   }
@@ -779,8 +792,24 @@ export class BangchiEngine {
     }
   }
 
+  private spawnVfx(cell: 0 | 1 | 2 | 3, x: number, y: number, scale: number, life: number): void {
+    this.state.vfxList.push({
+      id: this.nextId++,
+      cell,
+      x,
+      y,
+      scale,
+      life,
+      maxLife: life,
+    });
+  }
+
   private tickParticlesAndTexts(dt: number): void {
     const s = this.state;
+    for (let i = s.vfxList.length - 1; i >= 0; i--) {
+      s.vfxList[i].life -= dt;
+      if (s.vfxList[i].life <= 0) s.vfxList.splice(i, 1);
+    }
     for (let i = s.floatingTexts.length - 1; i >= 0; i--) {
       const ft = s.floatingTexts[i];
       ft.y += ft.vy * dt;
