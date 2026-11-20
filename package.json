@@ -1,8 +1,8 @@
 {
   "name": "bangchi-knight",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "방치 나이트 (Bangchi Knight) — 다크 판타지 픽셀 아트 방치형 로그라이트 액션 RPG (Web-First → Native)",
+  "description": "방치 나이트 (Bangchi Knight) — 3종 전술 진형, 실시간 대장간 장비 단조, 원정대 동료 합류를 브라우저에서 바로 즐기는 16-bit 픽셀 방치형 원정 RPG (Web-First → Native)",
   "type": "module",
   "scripts": {
     "dev": "vite",

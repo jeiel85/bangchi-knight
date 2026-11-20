@@ -1,129 +1,128 @@
 import {
-  AWAKENING_CARDS,
-  RELICS,
-  SKILLS,
-  UPGRADES,
-  getBiomeForStage,
-  getKnightTier,
-  getRelicCost,
-  getUpgradeCost,
+  COMPANIONS,
+  FACILITIES,
+  RARITY_CONFIG,
+  STANCES,
+  TRAININGS,
+  createStarterEquipment,
+  getCompanionCost,
+  getFacilityCost,
+  getForgeLevel,
+  getForgeOreCost,
+  getKnightRankTitle,
+  getTrainingCost,
+  getZoneForStage,
+  rollForgedItem,
 } from './data';
 import type {
-  AwakeningCardDef,
-  BuyMode,
+  CompanionId,
   ComputedStats,
   EnemyEntity,
   EnemyKind,
+  FacilityKey,
   GameEvent,
   GameState,
-  RelicKey,
   SaveData,
-  SkillId,
-  UpgradeKey,
+  StanceId,
+  TrainingKey,
 } from './types';
 
 export const ARENA_WIDTH = 360;
-export const ARENA_HEIGHT = 270;
-export const HERO_X = 96;
-export const GROUND_Y = 204;
+export const ARENA_HEIGHT = 250;
+export const HERO_X = 128;
+export const GROUND_Y = 192;
 
 const ENEMY_NAMES: Record<EnemyKind, string> = {
-  slime: '심연 슬라임',
-  skeleton: '망자 해골병',
-  bat: '흡혈 박쥐',
-  knight: '타락한 기사',
-  gargoyle: '석상 가고일',
-  boss: '던전 보스',
+  goblin: '초원 고블린',
+  boar: '야생 멧돼지',
+  bandit: '협곡 산적',
+  scorpion: '사막 전갈',
+  bogling: '늪지 괴수',
+  golem: '서리 골렘',
+  wyvern: '화염 와이번',
+  boss: '구역 우두머리',
 };
 
 export class BangchiEngine {
   public state: GameState;
-  private nextEntityId = 1;
-  private eventQueue: GameEvent[] = [];
-  private isDemoMode: boolean;
+  private nextId = 1;
+  private events: GameEvent[] = [];
+  private demoMode: boolean;
 
   constructor(saved?: SaveData | null, options?: { demoMode?: boolean }) {
-    this.isDemoMode = Boolean(options?.demoMode);
+    this.demoMode = Boolean(options?.demoMode);
     this.state = this.createInitialState(saved);
     this.spawnWave();
   }
 
   private createInitialState(saved?: SaveData | null): GameState {
-    const upgrades = {
-      atk: saved?.upgrades?.atk ?? 0,
-      atkSpeed: saved?.upgrades?.atkSpeed ?? 0,
-      crit: saved?.upgrades?.crit ?? 0,
-      maxHp: saved?.upgrades?.maxHp ?? 0,
-      regen: saved?.upgrades?.regen ?? 0,
-      goldGain: saved?.upgrades?.goldGain ?? 0,
-    };
-
-    const relics = {
-      soulBlade: saved?.relics?.soulBlade ?? 0,
-      goldenGrace: saved?.relics?.goldenGrace ?? 0,
-      counterMastery: saved?.relics?.counterMastery ?? 0,
-      swiftStart: saved?.relics?.swiftStart ?? 0,
-    };
-
-    const stage = Math.max(1, saved?.stage ?? 1);
-    const level = Math.max(1, saved?.level ?? 1);
-
+    const starterEq = createStarterEquipment();
     const state: GameState = {
-      stage,
-      highestStage: Math.max(stage, saved?.highestStage ?? stage),
+      stage: Math.max(1, saved?.stage ?? 1),
+      highestStage: Math.max(saved?.stage ?? 1, saved?.highestStage ?? 1),
       wave: Math.min(5, Math.max(1, saved?.wave ?? 1)),
-      gold: Math.max(0, saved?.gold ?? 25),
-      soul: Math.max(0, saved?.soul ?? 0),
-      level,
-      exp: Math.max(0, saved?.exp ?? 0),
-      expToNext: this.calcExpRequired(level),
+      gold: Math.max(0, saved?.gold ?? 40),
+      ore: Math.max(0, saved?.ore ?? 12),
+      medals: Math.max(0, saved?.medals ?? 0),
+      forgeExp: Math.max(0, saved?.forgeExp ?? 0),
 
-      heroX: HERO_X,
-      heroHp: 120,
-      heroMaxHp: 120,
+      stance: saved?.stance ?? 'vanguard',
+      equipment: saved?.equipment
+        ? {
+            weapon: { ...saved.equipment.weapon },
+            shield: { ...saved.equipment.shield },
+            armor: { ...saved.equipment.armor },
+          }
+        : starterEq,
+      pendingForgeItem: null,
+
+      training: {
+        swordplay: saved?.training?.swordplay ?? 0,
+        fortitude: saved?.training?.fortitude ?? 0,
+        logistics: saved?.training?.logistics ?? 0,
+      },
+      companions: {
+        ranger: saved?.companions?.ranger ?? (this.demoMode ? 2 : 0),
+        pyro: saved?.companions?.pyro ?? (this.demoMode ? 1 : 0),
+        banneret: saved?.companions?.banneret ?? (this.demoMode ? 1 : 0),
+      },
+      facilities: {
+        royalForge: saved?.facilities?.royalForge ?? 0,
+        warAcademy: saved?.facilities?.warAcademy ?? 0,
+        supplyWagon: saved?.facilities?.supplyWagon ?? 0,
+        guildHall: saved?.facilities?.guildHall ?? 0,
+      },
+
+      heroHp: 180,
+      heroMaxHp: 180,
       heroShield: 0,
-      heroState: 'run',
-      heroStateTimer: 0,
+      heroAction: 'march',
+      heroActionTimer: 0,
       heroAttackTimer: 0,
-      heroAnimTime: 0,
+      animTime: 0,
+      scrollX: 0,
 
-      feverGauge: this.isDemoMode ? 45 : 0,
-      feverActiveTimer: 0,
-      counterCooldown: 0,
-      counterFlashTimer: 0,
+      companionTimers: { ranger: 0.4, pyro: 1.0, banneret: 1.6 },
+
+      morale: this.demoMode ? 65 : 20,
+      rallyTimer: 0,
       screenShake: 0,
-      scrollOffset: 0,
       bannerText: '',
       bannerTimer: 0,
 
-      upgrades,
-      relics,
-      cards: { ...(saved?.cards ?? {}) },
-      skillCooldowns: {
-        moonSlash: 0,
-        flashDash: 0,
-        eclipseAegis: 0,
-        abyssStorm: 0,
-      },
-
-      pendingAwakenings: saved?.pendingAwakenings ?? 0,
-      activeCardChoices: null,
-
-      autoSkill: saved?.autoSkill ?? true,
       speedMult: saved?.speedMult ?? 1,
+      autoRally: saved?.autoRally ?? false,
       soundEnabled: saved?.soundEnabled ?? true,
-      buyMode: 1,
 
       enemies: [],
+      projectiles: [],
       floatingTexts: [],
-      slashEffects: [],
       particles: [],
 
       totalKills: saved?.totalKills ?? 0,
-      totalCounters: saved?.totalCounters ?? 0,
+      totalForges: saved?.totalForges ?? 0,
+      expeditionReturns: saved?.expeditionReturns ?? 0,
       totalPlaySeconds: saved?.totalPlaySeconds ?? 0,
-      rebirthCount: saved?.rebirthCount ?? 0,
-      recentDamageWindow: [],
     };
 
     this.state = state;
@@ -134,56 +133,67 @@ export class BangchiEngine {
   }
 
   public drainEvents(): GameEvent[] {
-    if (this.eventQueue.length === 0) return [];
-    const copy = this.eventQueue;
-    this.eventQueue = [];
+    if (this.events.length === 0) return [];
+    const copy = this.events;
+    this.events = [];
     return copy;
   }
 
-  private emit(type: GameEvent['type'], label?: string): void {
-    this.eventQueue.push({ type, label });
+  private emit(type: GameEvent['type']): void {
+    this.events.push({ type });
   }
 
-  public calcExpRequired(level: number): number {
-    return Math.floor(32 * Math.pow(1.24, level - 1));
+  public getActiveStance() {
+    return STANCES.find((st) => st.id === this.state.stance) ?? STANCES[0];
   }
 
   public computeStats(): ComputedStats {
     const s = this.state;
-    const c = (id: string) => s.cards[id] ?? 0;
+    const stance = this.getActiveStance();
+    const forgeMult = 1 + s.facilities.royalForge * 0.2;
+    const academyMult = 1 + s.facilities.warAcademy * 0.25;
+    const supplyMult = 1 + s.facilities.supplyWagon * 0.3;
 
-    const baseAtk = 14 + s.upgrades.atk * 4.5 + (s.level - 1) * 1.6;
-    const cardAtkMult = 1 + c('berserk_blood') * 0.22 + c('moon_resonance') * 0.28;
-    const relicAtkMult = 1 + s.relics.soulBlade * 0.25;
-    const feverAtkMult = s.feverActiveTimer > 0 ? 1.8 : 1;
-    const atk = baseAtk * cardAtkMult * relicAtkMult * feverAtkMult;
+    const eqList = [s.equipment.weapon, s.equipment.shield, s.equipment.armor];
+    let bonusCrit = 0;
+    let bonusSpeed = 0;
+    let bonusGold = 0;
+    let bonusHp = 0;
+    for (const item of eqList) {
+      if (item.bonusStat === 'crit') bonusCrit += item.bonusValue;
+      if (item.bonusStat === 'speed') bonusSpeed += item.bonusValue;
+      if (item.bonusStat === 'gold') bonusGold += item.bonusValue;
+      if (item.bonusStat === 'hp') bonusHp += item.bonusValue;
+    }
 
-    const baseAps = 1.18 * (1 + s.upgrades.atkSpeed * 0.05 + c('gale_blade') * 0.18 + c('moon_resonance') * 0.12);
-    const aps = baseAps * (s.feverActiveTimer > 0 ? 1.65 : 1);
+    const rallyAtkMult = s.rallyTimer > 0 ? 1.55 : 1;
+    const rallyApsMult = s.rallyTimer > 0 ? 1.4 : 1;
 
-    const critChance = Math.min(0.88, 0.1 + s.upgrades.crit * 0.02 + c('keen_edge') * 0.08);
-    const critMult = 1.65 + s.upgrades.crit * 0.08 + c('keen_edge') * 0.25 + c('eclipse_overdrive') * 0.35;
+    const weaponAtk = s.equipment.weapon.power * forgeMult;
+    const baseAtk = 10 + weaponAtk + s.training.swordplay * 5;
+    const atk = baseAtk * academyMult * stance.atkMult * rallyAtkMult;
 
-    const maxHp = Math.floor((120 + s.upgrades.maxHp * 28 + (s.level - 1) * 10) * (1 + c('iron_bastion') * 0.3));
-    const regenPerSec =
-      2.2 +
-      s.upgrades.regen * 1.6 +
-      maxHp * (0.0025 * s.upgrades.regen + 0.004 * c('iron_bastion'));
+    const aps = 1.12 * (1 + bonusSpeed) * stance.apsMult * rallyApsMult;
+    const critChance = Math.min(0.8, 0.1 + s.training.swordplay * 0.006 + bonusCrit);
+    const critMult = 1.75;
 
-    const goldMult =
-      (1 + s.upgrades.goldGain * 0.16) *
-      (1 + c('golden_hunter') * 0.35) *
-      (1 + s.relics.goldenGrace * 0.3);
+    const shieldHp = s.equipment.shield.power * forgeMult;
+    const maxHp = Math.round((135 + shieldHp + s.training.fortitude * 32) * (1 + bonusHp));
+    const def = Math.round(s.equipment.armor.power * forgeMult);
+    const regenPerSec = 2.6 + s.training.fortitude * 2.2 + maxHp * 0.006;
 
-    const lifesteal = c('vampiric_edge') * 0.05;
-    const counterMult = 2.6 + c('counter_sage') * 0.6 + s.relics.counterMastery * 0.45;
-    const bossDmgMult = 1 + c('boss_slayer') * 0.4 + c('moon_resonance') * 0.25;
-    const chainLightningChance = Math.min(0.85, c('chain_lightning') * 0.28);
-    const executeBonus = c('executioner') * 0.45;
+    const goldMult = (1 + s.training.logistics * 0.15 + bonusGold) * stance.lootMult * supplyMult;
+    const oreMult = (1 + s.training.logistics * 0.12) * stance.lootMult * supplyMult;
 
-    const avgHit = atk * (1 - critChance + critChance * critMult);
-    const dps = avgHit * aps;
-    const tier = getKnightTier(s.stage);
+    const heroDps = atk * (1 - critChance + critChance * critMult) * aps;
+    const rangerDps =
+      s.companions.ranger > 0
+        ? (atk * (0.48 + s.companions.ranger * 0.16)) / COMPANIONS[0].interval
+        : 0;
+    const pyroDps =
+      s.companions.pyro > 0
+        ? (atk * (0.95 + s.companions.pyro * 0.28) * 1.6) / COMPANIONS[1].interval
+        : 0;
 
     return {
       atk,
@@ -191,521 +201,443 @@ export class BangchiEngine {
       critChance,
       critMult,
       maxHp,
+      def,
       regenPerSec,
       goldMult,
-      lifesteal,
-      counterMult,
-      bossDmgMult,
-      chainLightningChance,
-      executeBonus,
-      dps,
-      tierName: tier.name,
-      tierIndex: tier.index,
+      oreMult,
+      dps: heroDps + rangerDps + pyroDps,
+      forgeLevel: getForgeLevel(s.forgeExp),
+      rankTitle: getKnightRankTitle(s.highestStage),
     };
   }
 
   public toSaveData(): SaveData {
     const s = this.state;
     return {
-      version: 1,
+      version: 2,
       stage: s.stage,
       highestStage: s.highestStage,
       wave: s.wave,
       gold: Math.floor(s.gold),
-      soul: Math.floor(s.soul),
-      level: s.level,
-      exp: Math.floor(s.exp),
-      upgrades: { ...s.upgrades },
-      relics: { ...s.relics },
-      cards: { ...s.cards },
-      pendingAwakenings: s.pendingAwakenings,
-      autoSkill: s.autoSkill,
+      ore: Math.floor(s.ore),
+      medals: Math.floor(s.medals),
+      forgeExp: s.forgeExp,
+      stance: s.stance,
+      equipment: {
+        weapon: { ...s.equipment.weapon },
+        shield: { ...s.equipment.shield },
+        armor: { ...s.equipment.armor },
+      },
+      training: { ...s.training },
+      companions: { ...s.companions },
+      facilities: { ...s.facilities },
       speedMult: s.speedMult,
+      autoRally: s.autoRally,
       soundEnabled: s.soundEnabled,
       totalKills: s.totalKills,
-      totalCounters: s.totalCounters,
+      totalForges: s.totalForges,
+      expeditionReturns: s.expeditionReturns,
       totalPlaySeconds: Math.floor(s.totalPlaySeconds),
-      rebirthCount: s.rebirthCount,
       savedAt: Date.now(),
     };
   }
 
-  public resetForNewGame(): void {
+  public resetGame(): void {
     this.state = this.createInitialState(null);
     this.spawnWave();
   }
 
-  public getRebirthSoulReward(): number {
-    if (this.state.stage < 3) return 0;
-    return Math.floor(Math.pow(this.state.stage - 1, 1.45) * 2.2);
+  public setStance(stance: StanceId): void {
+    if (this.state.stance === stance) return;
+    this.state.stance = stance;
+    const def = this.getActiveStance();
+    this.state.bannerText = `${def.icon} ${def.name} 진형 전환!`;
+    this.state.bannerTimer = 1.4;
+    this.spawnBurst(HERO_X, GROUND_Y - 22, def.color, 10);
+    this.emit('stance');
   }
 
-  public canRebirth(): boolean {
-    return this.state.stage >= 3;
-  }
-
-  public performRebirth(): number {
-    if (!this.canRebirth()) return 0;
-    const gainedSoul = this.getRebirthSoulReward();
+  public triggerRally(): boolean {
     const s = this.state;
-    s.soul += gainedSoul;
-    s.rebirthCount += 1;
+    if (s.morale < 100 || s.rallyTimer > 0) return false;
+    s.rallyTimer = 9.0;
+    s.screenShake = 6;
+    s.bannerText = '🎺 진격 나팔! 전군 돌격 개시!';
+    s.bannerTimer = 2.0;
+
+    // Immediate Warhorn Volley: knight + all unlocked companions strike!
+    const stats = this.computeStats();
+    s.heroHp = Math.min(stats.maxHp, s.heroHp + stats.maxHp * 0.25);
+    s.heroShield = Math.max(s.heroShield, Math.round(stats.maxHp * 0.25));
+    for (const enemy of s.enemies) {
+      this.damageEnemy(enemy, stats.atk * 2.4, true, '#fde047');
+    }
+    this.spawnBurst(HERO_X, GROUND_Y - 24, '#facc15', 16);
+    this.emit('rally');
+    return true;
+  }
+
+  public getForgeCost(): number {
+    return getForgeOreCost(getForgeLevel(this.state.forgeExp));
+  }
+
+  public forgeEquipment(): boolean {
+    const s = this.state;
+    if (s.pendingForgeItem) return false;
+    const cost = this.getForgeCost();
+    if (s.ore < cost) return false;
+
+    s.ore -= cost;
+    s.forgeExp += 1;
+    s.totalForges += 1;
+    const item = rollForgedItem(s.stage, getForgeLevel(s.forgeExp), `eq-${Date.now()}-${this.nextId++}`);
+    s.pendingForgeItem = item;
+    this.emit(item.rarity === 'epic' || item.rarity === 'mythic' ? 'forgeRare' : 'forge');
+    return true;
+  }
+
+  public resolveForgedItem(equip: boolean): void {
+    const s = this.state;
+    const item = s.pendingForgeItem;
+    if (!item) return;
+
+    const rarityCfg = RARITY_CONFIG[item.rarity];
+    if (equip) {
+      const old = s.equipment[item.slot];
+      s.equipment[item.slot] = item;
+      const salvageGold = Math.round(12 * old.level * RARITY_CONFIG[old.rarity].mult);
+      s.gold += salvageGold;
+      s.bannerText = `🔨 ${item.name} 장착 완료! (+${salvageGold}G)`;
+      s.bannerTimer = 1.6;
+    } else {
+      const salvageGold = Math.round(18 * item.level * rarityCfg.mult);
+      const salvageOre = Math.max(1, Math.floor(this.getForgeCost() * 0.35));
+      s.gold += salvageGold;
+      s.ore += salvageOre;
+      s.forgeExp += 1;
+    }
+
+    s.pendingForgeItem = null;
+    const stats = this.computeStats();
+    s.heroMaxHp = stats.maxHp;
+    s.heroHp = Math.min(stats.maxHp, s.heroHp + 20);
+    this.emit('upgrade');
+  }
+
+  public buyTraining(key: TrainingKey): boolean {
+    const def = TRAININGS.find((t) => t.key === key)!;
+    const cost = getTrainingCost(def, this.state.training[key]);
+    if (this.state.gold < cost) return false;
+    this.state.gold -= cost;
+    this.state.training[key] += 1;
+    const stats = this.computeStats();
+    this.state.heroMaxHp = stats.maxHp;
+    if (key === 'fortitude') {
+      this.state.heroHp = Math.min(stats.maxHp, this.state.heroHp + 32);
+    }
+    this.emit('upgrade');
+    return true;
+  }
+
+  public buyCompanion(id: CompanionId): boolean {
+    const def = COMPANIONS.find((c) => c.id === id)!;
+    const lv = this.state.companions[id];
+    const cost = getCompanionCost(def, lv);
+    if (this.state.gold < cost) return false;
+    this.state.gold -= cost;
+    this.state.companions[id] = lv + 1;
+    if (lv === 0) {
+      this.state.bannerText = `${def.icon} ${def.name} 원정대 합류!`;
+      this.state.bannerTimer = 1.8;
+    }
+    this.emit('upgrade');
+    return true;
+  }
+
+  public buyFacility(key: FacilityKey): boolean {
+    const def = FACILITIES.find((f) => f.key === key)!;
+    const lv = this.state.facilities[key];
+    if (lv >= def.maxLevel) return false;
+    const cost = getFacilityCost(def, lv);
+    if (this.state.medals < cost) return false;
+    this.state.medals -= cost;
+    this.state.facilities[key] = lv + 1;
+    this.emit('upgrade');
+    return true;
+  }
+
+  public canReturnToKingdom(): boolean {
+    return this.state.stage >= 4;
+  }
+
+  public getReturnMedalReward(): number {
+    if (!this.canReturnToKingdom()) return 0;
+    return Math.floor(Math.pow(this.state.stage - 2, 1.45) * 2.5);
+  }
+
+  public performKingdomReturn(): number {
+    if (!this.canReturnToKingdom()) return 0;
+    const reward = this.getReturnMedalReward();
+    const s = this.state;
+    s.medals += reward;
+    s.expeditionReturns += 1;
     s.stage = 1;
     s.wave = 1;
-    s.level = 1;
-    s.exp = 0;
-    s.expToNext = this.calcExpRequired(1);
-    s.gold = 25 + s.relics.swiftStart * 120;
-    s.upgrades = {
-      atk: 0,
-      atkSpeed: 0,
-      crit: 0,
-      maxHp: 0,
-      regen: 0,
-      goldGain: 0,
-    };
-    s.cards = {};
-    s.pendingAwakenings = 0;
-    s.activeCardChoices = null;
-    s.feverGauge = 0;
-    s.feverActiveTimer = 0;
+    s.gold = 40 + s.facilities.guildHall * 120;
+    s.ore = 12 + s.facilities.guildHall * 12;
+    s.training = { swordplay: 0, fortitude: 0, logistics: 0 };
+    s.companions = { ranger: 0, pyro: 0, banneret: 0 };
+    s.equipment = createStarterEquipment();
+    s.pendingForgeItem = null;
+    s.morale = 25;
+    s.rallyTimer = 0;
     s.heroShield = 0;
-
     const stats = this.computeStats();
     s.heroMaxHp = stats.maxHp;
     s.heroHp = stats.maxHp;
-    s.bannerText = `환생 완료! 영혼 +${gainedSoul}`;
-    s.bannerTimer = 2.6;
-    this.emit('rebirth');
+    s.bannerText = `🏰 왕국 귀환! 훈장 +${reward} 획득`;
+    s.bannerTimer = 2.4;
+    this.emit('returnKingdom');
     this.spawnWave();
-    return gainedSoul;
+    return reward;
   }
 
   public step(rawDt: number): void {
     const dt = Math.min(0.05, rawDt) * this.state.speedMult;
     const s = this.state;
 
-    // Pause combat while choosing awakening cards (except in demo mode)
-    if (s.activeCardChoices && !this.isDemoMode) {
-      this.updateVisualsOnly(rawDt);
-      return;
-    }
-
     s.totalPlaySeconds += rawDt;
-    s.heroAnimTime += dt;
-    s.screenShake = Math.max(0, s.screenShake - rawDt * 24);
-    s.counterCooldown = Math.max(0, s.counterCooldown - dt);
-    s.counterFlashTimer = Math.max(0, s.counterFlashTimer - rawDt);
-    if (s.bannerTimer > 0) {
-      s.bannerTimer = Math.max(0, s.bannerTimer - rawDt);
+    s.animTime += dt;
+    s.screenShake = Math.max(0, s.screenShake - rawDt * 22);
+    if (s.bannerTimer > 0) s.bannerTimer = Math.max(0, s.bannerTimer - rawDt);
+    if (s.heroActionTimer > 0) {
+      s.heroActionTimer -= dt;
+      if (s.heroActionTimer <= 0) s.heroAction = 'march';
     }
 
     const stats = this.computeStats();
+    const stance = this.getActiveStance();
     s.heroMaxHp = stats.maxHp;
-    s.heroHp = Math.min(s.heroMaxHp, s.heroHp + stats.regenPerSec * dt);
+    s.heroHp = Math.min(stats.maxHp, s.heroHp + stats.regenPerSec * dt);
 
-    if (s.feverActiveTimer > 0) {
-      s.feverActiveTimer = Math.max(0, s.feverActiveTimer - dt);
-      s.feverGauge = (s.feverActiveTimer / 8.0) * 100;
+    if (stance.shieldRegenRatio > 0) {
+      const cap = Math.round(stats.maxHp * 0.38);
+      s.heroShield = Math.min(cap, s.heroShield + stats.maxHp * stance.shieldRegenRatio * dt);
+    } else if (s.rallyTimer <= 0 && s.heroShield > 0) {
+      s.heroShield = Math.max(0, s.heroShield - stats.maxHp * 0.03 * dt);
     }
 
-    // Skill cooldowns
-    for (const sk of SKILLS) {
-      if (s.skillCooldowns[sk.id] > 0) {
-        s.skillCooldowns[sk.id] = Math.max(0, s.skillCooldowns[sk.id] - dt);
-      }
+    if (s.rallyTimer > 0) {
+      s.rallyTimer = Math.max(0, s.rallyTimer - dt);
+      s.morale = (s.rallyTimer / 9.0) * 100;
     }
 
-    if (s.heroStateTimer > 0) {
-      s.heroStateTimer -= dt;
-      if (s.heroStateTimer <= 0) {
-        s.heroState = 'run';
-      }
-    }
-
-    // Spawn wave if empty
     if (s.enemies.length === 0) {
       this.advanceWave();
     }
 
-    const frontEnemy = this.getFrontEnemy();
-    const engageDist = frontEnemy?.isBoss ? 72 : 56;
-    const inCombat = frontEnemy !== null && frontEnemy.x - s.heroX <= engageDist;
+    const front = this.getFrontEnemy();
+    const engageDist = front?.isBoss ? 68 : 54;
+    const inCombat = front !== null && front.x - HERO_X <= engageDist;
 
     if (!inCombat) {
-      // Hero running forward; world scrolls
-      const runSpeed = 94;
-      s.scrollOffset += runSpeed * dt;
+      const speed = (s.stance === 'plunder' ? 112 : 90) * (s.rallyTimer > 0 ? 1.25 : 1);
+      s.scrollX += speed * dt;
       for (const e of s.enemies) {
-        e.x -= runSpeed * dt;
+        e.x -= speed * dt;
         e.animTime += dt;
       }
     } else {
-      // Combat tick
+      // Enemy AI
       for (let i = 0; i < s.enemies.length; i++) {
         const e = s.enemies[i];
         e.animTime += dt;
         e.hitFlash = Math.max(0, e.hitFlash - rawDt * 6);
-        const desiredX = s.heroX + (e.isBoss ? 70 : 52 + i * 28);
-        if (e.x > desiredX) {
-          e.x = Math.max(desiredX, e.x - 68 * dt);
+        const stopX = HERO_X + (e.isBoss ? 66 : 48 + i * 28);
+        if (e.x > stopX) {
+          e.x = Math.max(stopX, e.x - 62 * dt);
         }
-
-        if (e.stunTimer > 0) {
-          e.stunTimer = Math.max(0, e.stunTimer - dt);
-          e.windup = 0;
-          continue;
-        }
-
-        // Only front-most 2 enemies attack
-        if (i < 2 && e.x - s.heroX <= (e.isBoss ? 80 : 88)) {
-          if (e.windup > 0) {
-            e.windup += dt / e.windupDuration;
-            if (e.windup >= 1) {
-              e.windup = 0;
-              e.attackCooldown = e.attackInterval;
-              this.resolveEnemyHit(e, stats);
-            }
-          } else {
-            e.attackCooldown -= dt;
-            if (e.attackCooldown <= 0) {
-              e.windup = 0.01;
-            }
+        if (i < 2 && e.x - HERO_X <= (e.isBoss ? 76 : 82)) {
+          e.attackTimer -= dt;
+          if (e.attackTimer <= 0) {
+            e.attackTimer = e.attackInterval;
+            this.resolveEnemyAttack(e, stats, stance.dmgTakenMult);
           }
         }
       }
 
-      // Hero auto-attack
+      // Knight basic attack
       s.heroAttackTimer -= dt;
-      if (s.heroAttackTimer <= 0 && frontEnemy) {
+      if (s.heroAttackTimer <= 0 && front) {
         s.heroAttackTimer = 1 / stats.aps;
-        this.performHeroBasicAttack(frontEnemy, stats);
+        this.performKnightSwing(front, stats);
       }
 
-      // Auto-skills & auto-fever in demo mode
-      if (s.autoSkill || this.isDemoMode) {
-        this.tryAutoSkills();
-      }
-      if (this.isDemoMode && s.feverGauge >= 100 && s.feverActiveTimer <= 0) {
-        this.triggerFever();
+      // Companions active support!
+      this.tickCompanions(dt, stats);
+
+      if ((s.autoRally || this.demoMode) && s.morale >= 100 && s.rallyTimer <= 0) {
+        this.triggerRally();
       }
     }
 
+    this.tickProjectiles(dt);
     this.cleanupDeadEnemies(stats);
-    this.updateVisualsOnly(dt);
+    this.tickParticlesAndTexts(dt);
   }
 
-  private updateVisualsOnly(dt: number): void {
+  private tickCompanions(dt: number, stats: ComputedStats): void {
     const s = this.state;
-    for (let i = s.floatingTexts.length - 1; i >= 0; i--) {
-      const ft = s.floatingTexts[i];
-      ft.y += ft.vy * dt;
-      ft.vy *= 0.94;
-      ft.life -= dt;
-      if (ft.life <= 0) s.floatingTexts.splice(i, 1);
+    const speedBoost = s.rallyTimer > 0 ? 1.45 : 1;
+
+    // 1. Ranger shoots arrows
+    if (s.companions.ranger > 0 && s.enemies.length > 0) {
+      s.companionTimers.ranger -= dt * speedBoost;
+      if (s.companionTimers.ranger <= 0) {
+        s.companionTimers.ranger = COMPANIONS[0].interval;
+        const dmg = stats.atk * (0.48 + s.companions.ranger * 0.16);
+        s.projectiles.push({
+          id: this.nextId++,
+          kind: 'arrow',
+          x: HERO_X - 38,
+          y: GROUND_Y - 22,
+          vx: 260,
+          vy: 0,
+          damage: dmg,
+          color: '#86efac',
+          life: 1.2,
+        });
+        this.emit('arrow');
+      }
     }
 
-    for (let i = s.slashEffects.length - 1; i >= 0; i--) {
-      const fx = s.slashEffects[i];
-      fx.life -= dt;
-      if (fx.life <= 0) s.slashEffects.splice(i, 1);
+    // 2. Pyromancer launches AoE fireballs
+    if (s.companions.pyro > 0 && s.enemies.length > 0) {
+      s.companionTimers.pyro -= dt * speedBoost;
+      if (s.companionTimers.pyro <= 0) {
+        s.companionTimers.pyro = COMPANIONS[1].interval;
+        const dmg = stats.atk * (0.95 + s.companions.pyro * 0.28);
+        s.projectiles.push({
+          id: this.nextId++,
+          kind: 'fireball',
+          x: HERO_X - 70,
+          y: GROUND_Y - 28,
+          vx: 185,
+          vy: -16,
+          damage: dmg,
+          color: '#fb923c',
+          life: 1.6,
+        });
+        this.emit('fireball');
+      }
     }
 
-    for (let i = s.particles.length - 1; i >= 0; i--) {
-      const p = s.particles[i];
+    // 3. Banneret heals knight & fills Warhorn morale
+    if (s.companions.banneret > 0) {
+      s.companionTimers.banneret -= dt * speedBoost;
+      if (s.companionTimers.banneret <= 0) {
+        s.companionTimers.banneret = COMPANIONS[2].interval;
+        const healAmt = Math.round(stats.maxHp * (0.07 + s.companions.banneret * 0.015));
+        s.heroHp = Math.min(stats.maxHp, s.heroHp + healAmt);
+        this.addMorale(8 + s.companions.banneret * 1.5);
+        this.spawnText(HERO_X, GROUND_Y - 52, `+${healAmt}`, '#4ade80', 10, true);
+        this.spawnBurst(HERO_X - 96, GROUND_Y - 28, '#fde047', 6);
+        this.emit('heal');
+      }
+    }
+  }
+
+  private tickProjectiles(dt: number): void {
+    const s = this.state;
+    for (let i = s.projectiles.length - 1; i >= 0; i--) {
+      const p = s.projectiles[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 120 * dt;
+      if (p.kind === 'fireball') p.vy += 32 * dt;
       p.life -= dt;
-      if (p.life <= 0) s.particles.splice(i, 1);
-    }
-  }
 
-  private getFrontEnemy(): EnemyEntity | null {
-    if (this.state.enemies.length === 0) return null;
-    let front = this.state.enemies[0];
-    for (const e of this.state.enemies) {
-      if (e.x < front.x) front = e;
-    }
-    return front;
-  }
-
-  private performHeroBasicAttack(target: EnemyEntity, stats: ComputedStats): void {
-    const s = this.state;
-    s.heroState = 'attack';
-    s.heroStateTimer = Math.min(0.24, 0.7 / stats.aps);
-
-    const isCrit = Math.random() < stats.critChance;
-    let dmg = stats.atk * (0.94 + Math.random() * 0.12);
-    if (isCrit) dmg *= stats.critMult;
-    if (target.isBoss) dmg *= stats.bossDmgMult;
-    if (target.hp / target.maxHp <= 0.4 && stats.executeBonus > 0) {
-      dmg *= 1 + stats.executeBonus;
-    }
-
-    this.dealDamageToEnemy(target, dmg, isCrit ? 'crit' : 'normal', stats);
-    this.addFever(4.5);
-
-    if (stats.chainLightningChance > 0 && Math.random() < stats.chainLightningChance) {
-      for (const other of s.enemies) {
-        if (other.id !== target.id && other.hp > 0) {
-          this.dealDamageToEnemy(other, stats.atk * 1.1, 'storm', stats);
-          break;
+      const hitEnemy = s.enemies.find((e) => e.hp > 0 && Math.abs(e.x - p.x) < (e.isBoss ? 26 : 16));
+      if (hitEnemy) {
+        if (p.kind === 'fireball') {
+          for (const e of s.enemies) {
+            if (Math.abs(e.x - hitEnemy.x) <= 68) {
+              this.damageEnemy(e, p.damage, false, '#fb923c');
+            }
+          }
+          this.spawnBurst(hitEnemy.x, GROUND_Y - 22, '#f97316', 12);
+          s.screenShake = Math.max(s.screenShake, 3);
+        } else {
+          this.damageEnemy(hitEnemy, p.damage, false, '#86efac');
+          this.spawnBurst(hitEnemy.x, GROUND_Y - 20, '#86efac', 4);
         }
+        s.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (p.life <= 0 || p.x > ARENA_WIDTH + 20) {
+        s.projectiles.splice(i, 1);
       }
     }
-
-    this.emit(isCrit ? 'crit' : 'slash');
   }
 
-  private resolveEnemyHit(attacker: EnemyEntity, stats: ComputedStats): void {
+  private performKnightSwing(target: EnemyEntity, stats: ComputedStats): void {
     const s = this.state;
-    const autoCounterChance = Math.min(0.45, 0.14 + (s.cards['counter_sage'] ?? 0) * 0.06);
-    if (Math.random() < autoCounterChance) {
-      this.executeCounterSlash(attacker, stats, true);
-      return;
-    }
+    s.heroAction = 'swing';
+    s.heroActionTimer = Math.min(0.24, 0.7 / stats.aps);
 
-    let dmg = attacker.atk;
+    const isCrit = Math.random() < stats.critChance;
+    let dmg = stats.atk * (0.93 + Math.random() * 0.14);
+    if (isCrit) dmg *= stats.critMult;
+
+    this.damageEnemy(target, dmg, isCrit, isCrit ? '#facc15' : '#ffffff');
+    this.addMorale(5.5);
+    this.emit(isCrit ? 'crit' : 'hit');
+  }
+
+  private damageEnemy(enemy: EnemyEntity, rawDmg: number, isCrit: boolean, color: string): void {
+    const dmg = Math.max(1, Math.round(rawDmg));
+    enemy.hp -= dmg;
+    enemy.hitFlash = 1;
+    this.spawnText(
+      enemy.x + (Math.random() - 0.5) * 14,
+      GROUND_Y - (enemy.isBoss ? 54 : 34),
+      isCrit ? `${dmg}!` : `${dmg}`,
+      color,
+      isCrit ? 13 : 10,
+      isCrit
+    );
+    this.spawnBurst(enemy.x, GROUND_Y - 18, color, isCrit ? 7 : 3);
+  }
+
+  private resolveEnemyAttack(attacker: EnemyEntity, stats: ComputedStats, stanceDmgMult: number): void {
+    const s = this.state;
+    const raw = Math.max(1, attacker.atk * stanceDmgMult - stats.def * 0.55);
+    let dmg = Math.round(raw);
     if (s.heroShield > 0) {
-      const absorbed = Math.min(s.heroShield, dmg);
-      s.heroShield -= absorbed;
-      dmg -= absorbed;
+      const blocked = Math.min(s.heroShield, dmg);
+      s.heroShield -= blocked;
+      dmg -= blocked;
     }
 
     if (dmg > 0) {
       s.heroHp = Math.max(0, s.heroHp - dmg);
-      s.heroState = 'hurt';
-      s.heroStateTimer = 0.16;
-      s.screenShake = Math.max(s.screenShake, 3);
-      this.spawnText(s.heroX, GROUND_Y - 46, `-${Math.round(dmg)}`, '#fb7185', 11);
+      s.heroAction = 'hurt';
+      s.heroActionTimer = 0.15;
+      s.screenShake = Math.max(s.screenShake, 2.5);
+      this.spawnText(HERO_X, GROUND_Y - 46, `-${dmg}`, '#f87171', 10);
     }
 
     if (s.heroHp <= 0) {
-      this.handleHeroDefeat();
+      s.heroHp = stats.maxHp;
+      s.heroShield = 0;
+      s.wave = 1;
+      if (s.stage > 1) s.stage -= 1;
+      s.enemies = [];
+      s.bannerText = '전열 재정비 — 이전 캠프로 후퇴';
+      s.bannerTimer = 2.0;
+      this.emit('retreat');
+      this.spawnWave();
     }
-  }
-
-  public triggerManualCounter(): boolean {
-    const s = this.state;
-    if (s.counterCooldown > 0 || s.enemies.length === 0) return false;
-
-    const stats = this.computeStats();
-    const windingEnemy = s.enemies.find((e) => e.windup > 0.12);
-    const target = windingEnemy ?? this.getFrontEnemy();
-    if (!target) return false;
-
-    const isPerfect = Boolean(windingEnemy);
-    s.counterCooldown = isPerfect ? 1.4 : 2.8;
-    this.executeCounterSlash(target, stats, isPerfect);
-    return true;
-  }
-
-  private executeCounterSlash(target: EnemyEntity, stats: ComputedStats, isPerfect: boolean): void {
-    const s = this.state;
-    s.heroState = 'counter';
-    s.heroStateTimer = 0.34;
-    s.counterFlashTimer = isPerfect ? 0.28 : 0.14;
-    s.screenShake = isPerfect ? 7 : 4;
-    s.totalCounters += 1;
-
-    target.windup = 0;
-    target.attackCooldown = target.attackInterval;
-    target.stunTimer = Math.max(target.stunTimer, isPerfect ? 1.15 : 0.45);
-
-    const mult = stats.counterMult * (isPerfect ? 1.25 : 0.85);
-    const dmg = stats.atk * mult * (target.isBoss ? stats.bossDmgMult : 1);
-    this.dealDamageToEnemy(target, dmg, 'counter', stats);
-
-    this.spawnText(
-      s.heroX + 18,
-      GROUND_Y - 64,
-      isPerfect ? '⚡ 일섬 반격!' : '반격 베기!',
-      '#fde047',
-      isPerfect ? 13 : 11,
-      true
-    );
-
-    if (isPerfect) {
-      const bonusGold = Math.max(3, Math.floor(s.stage * 4 * stats.goldMult));
-      s.gold += bonusGold;
-      this.addFever(14);
-      this.spawnBurst(target.x, GROUND_Y - 24, '#fde047', 12);
-    } else {
-      this.addFever(7);
-      this.spawnBurst(target.x, GROUND_Y - 24, '#38bdf8', 7);
-    }
-
-    this.emit('counter');
-  }
-
-  public castSkill(skillId: SkillId): boolean {
-    const s = this.state;
-    const def = SKILLS.find((sk) => sk.id === skillId);
-    if (!def) return false;
-    if (s.stage < def.unlockStage && !this.isDemoMode) return false;
-    if (s.skillCooldowns[skillId] > 0) return false;
-    if (skillId !== 'eclipseAegis' && s.enemies.length === 0) return false;
-
-    const stats = this.computeStats();
-    s.skillCooldowns[skillId] = def.cooldown;
-    s.heroState = 'attack';
-    s.heroStateTimer = 0.3;
-
-    if (skillId === 'moonSlash') {
-      s.screenShake = 5;
-      for (const e of s.enemies) {
-        if (e.x - s.heroX < 185) {
-          this.dealDamageToEnemy(e, stats.atk * 2.8, 'moon', stats);
-        }
-      }
-      s.slashEffects.push({
-        id: this.nextEntityId++,
-        x: s.heroX + 54,
-        y: GROUND_Y - 24,
-        kind: 'moon',
-        life: 0.34,
-        maxLife: 0.34,
-        radius: 48,
-      });
-      this.addFever(12);
-    } else if (skillId === 'flashDash') {
-      const front = this.getFrontEnemy();
-      if (front) {
-        front.stunTimer = Math.max(front.stunTimer, 1.4);
-        front.windup = 0;
-        this.dealDamageToEnemy(front, stats.atk * 3.6, 'counter', stats);
-        this.spawnBurst(front.x, GROUND_Y - 24, '#38bdf8', 10);
-      }
-      s.screenShake = 6;
-      this.addFever(14);
-    } else if (skillId === 'eclipseAegis') {
-      const shieldAmt = Math.floor(stats.maxHp * 0.35);
-      const healAmt = Math.floor(stats.maxHp * 0.2);
-      s.heroShield = Math.max(s.heroShield, shieldAmt);
-      s.heroHp = Math.min(stats.maxHp, s.heroHp + healAmt);
-      s.slashEffects.push({
-        id: this.nextEntityId++,
-        x: s.heroX,
-        y: GROUND_Y - 24,
-        kind: 'heal',
-        life: 0.42,
-        maxLife: 0.42,
-        radius: 34,
-      });
-      this.spawnText(s.heroX, GROUND_Y - 56, `+${healAmt} 보호막`, '#34d399', 11, true);
-    } else if (skillId === 'abyssStorm') {
-      s.screenShake = 8;
-      for (const e of s.enemies) {
-        this.dealDamageToEnemy(e, stats.atk * 5.2, 'storm', stats);
-        s.slashEffects.push({
-          id: this.nextEntityId++,
-          x: e.x,
-          y: GROUND_Y - 28,
-          kind: 'storm',
-          life: 0.4,
-          maxLife: 0.4,
-          radius: 38,
-        });
-      }
-      this.addFever(18);
-    }
-
-    this.emit('skill', def.name);
-    return true;
-  }
-
-  private tryAutoSkills(): void {
-    const s = this.state;
-    const front = this.getFrontEnemy();
-    if (!front || front.x - s.heroX > 140) return;
-
-    if (s.heroHp < s.heroMaxHp * 0.68 && s.skillCooldowns.eclipseAegis <= 0 && s.stage >= 2) {
-      this.castSkill('eclipseAegis');
-      return;
-    }
-    if (s.skillCooldowns.abyssStorm <= 0 && s.stage >= 3) {
-      this.castSkill('abyssStorm');
-      return;
-    }
-    if (s.skillCooldowns.flashDash <= 0) {
-      this.castSkill('flashDash');
-      return;
-    }
-    if (s.skillCooldowns.moonSlash <= 0) {
-      this.castSkill('moonSlash');
-    }
-  }
-
-  public triggerFever(): boolean {
-    const s = this.state;
-    if (s.feverGauge < 100 || s.feverActiveTimer > 0) return false;
-    s.feverActiveTimer = 8.0;
-    s.screenShake = 9;
-    s.bannerText = '🌑 흑월 폭주 발동!';
-    s.bannerTimer = 1.8;
-    this.spawnBurst(s.heroX, GROUND_Y - 24, '#f5b942', 18);
-    this.emit('feverStart');
-    return true;
-  }
-
-  private addFever(amount: number): void {
-    const s = this.state;
-    if (s.feverActiveTimer > 0) return;
-    const boost = 1 + (s.cards['eclipse_overdrive'] ?? 0) * 0.45;
-    s.feverGauge = Math.min(100, s.feverGauge + amount * boost);
-  }
-
-  private dealDamageToEnemy(
-    enemy: EnemyEntity,
-    rawDmg: number,
-    kind: 'normal' | 'crit' | 'counter' | 'moon' | 'storm',
-    stats: ComputedStats
-  ): void {
-    const dmg = Math.max(1, Math.round(rawDmg));
-    enemy.hp -= dmg;
-    enemy.hitFlash = 1;
-
-    if (stats.lifesteal > 0) {
-      this.state.heroHp = Math.min(stats.maxHp, this.state.heroHp + dmg * stats.lifesteal);
-    }
-
-    const colorMap = {
-      normal: '#f8fafc',
-      crit: '#fbbf24',
-      counter: '#38bdf8',
-      moon: '#f5b942',
-      storm: '#c084fc',
-    };
-
-    const sizeMap = {
-      normal: 11,
-      crit: 14,
-      counter: 15,
-      moon: 13,
-      storm: 14,
-    };
-
-    this.spawnText(
-      enemy.x + (Math.random() - 0.5) * 18,
-      GROUND_Y - (enemy.isBoss ? 56 : 36),
-      kind === 'crit' ? `${dmg}!` : `${dmg}`,
-      colorMap[kind],
-      sizeMap[kind],
-      kind !== 'normal'
-    );
-
-    this.state.slashEffects.push({
-      id: this.nextEntityId++,
-      x: enemy.x,
-      y: GROUND_Y - (enemy.isBoss ? 28 : 18),
-      kind,
-      life: 0.22,
-      maxLife: 0.22,
-      radius: enemy.isBoss ? 34 : 24,
-    });
-
-    this.spawnBurst(enemy.x, GROUND_Y - 20, colorMap[kind], kind === 'normal' ? 4 : 8);
   }
 
   private cleanupDeadEnemies(stats: ComputedStats): void {
@@ -713,68 +645,24 @@ export class BangchiEngine {
     for (let i = s.enemies.length - 1; i >= 0; i--) {
       const e = s.enemies[i];
       if (e.hp > 0) continue;
-
       s.enemies.splice(i, 1);
       s.totalKills += 1;
 
       const goldGain = Math.max(1, Math.round(e.goldReward * stats.goldMult));
+      const oreGain = Math.max(1, Math.round(e.oreReward * stats.oreMult));
       s.gold += goldGain;
-      this.spawnText(e.x, GROUND_Y - 12, `+${goldGain}G`, '#fde047', 10);
-      this.spawnBurst(e.x, GROUND_Y - 16, '#fbbf24', e.isBoss ? 22 : 10);
+      s.ore += oreGain;
 
-      if (e.soulReward > 0) {
-        s.soul += e.soulReward;
-        this.spawnText(e.x, GROUND_Y - 46, `+${e.soulReward} SOUL`, '#c084fc', 12, true);
-      }
-
-      this.gainExp(e.expReward);
+      this.spawnText(e.x - 8, GROUND_Y - 14, `+${goldGain}G`, '#facc15', 9);
+      this.spawnText(e.x + 12, GROUND_Y - 26, `+${oreGain}광석`, '#93c5fd', 9);
+      this.spawnBurst(e.x, GROUND_Y - 18, '#facc15', e.isBoss ? 20 : 8);
 
       if (e.isBoss) {
-        s.bannerText = `STAGE ${s.stage} 돌파!`;
+        s.bannerText = `🚩 STAGE ${s.stage} 점령 완료!`;
         s.bannerTimer = 2.0;
         this.emit('bossKill');
-        if (!this.isDemoMode) {
-          s.pendingAwakenings += 1;
-          this.openAwakeningIfReady();
-        }
       }
     }
-  }
-
-  private gainExp(amount: number): void {
-    const s = this.state;
-    s.exp += amount;
-    while (s.exp >= s.expToNext) {
-      s.exp -= s.expToNext;
-      s.level += 1;
-      s.expToNext = this.calcExpRequired(s.level);
-      const stats = this.computeStats();
-      s.heroMaxHp = stats.maxHp;
-      s.heroHp = stats.maxHp;
-      this.spawnText(s.heroX, GROUND_Y - 60, `LEVEL UP! LV.${s.level}`, '#34d399', 12, true);
-      this.emit('levelUp');
-
-      if (!this.isDemoMode && s.level % 3 === 0) {
-        s.pendingAwakenings += 1;
-        this.openAwakeningIfReady();
-      }
-    }
-  }
-
-  private handleHeroDefeat(): void {
-    const s = this.state;
-    const stats = this.computeStats();
-    s.heroHp = stats.maxHp;
-    s.heroShield = 0;
-    s.wave = 1;
-    if (s.stage > 1) {
-      s.stage -= 1;
-    }
-    s.enemies = [];
-    s.bannerText = '전열 재정비 — 이전 웨이브로 복귀';
-    s.bannerTimer = 2.0;
-    this.emit('heroDie');
-    this.spawnWave();
   }
 
   private advanceWave(): void {
@@ -791,189 +679,80 @@ export class BangchiEngine {
 
   private spawnWave(): void {
     const s = this.state;
-    const biome = getBiomeForStage(s.stage);
-    const isBossWave = s.wave === 5;
-    const scaleFactor = Math.pow(1.36, s.stage - 1) * (1 + (s.wave - 1) * 0.14);
+    const zone = getZoneForStage(s.stage);
+    const isBoss = s.wave === 5;
+    const factor = Math.pow(1.34, s.stage - 1) * (1 + (s.wave - 1) * 0.14);
 
-    if (isBossWave) {
-      const maxHp = Math.round(165 * scaleFactor);
+    if (isBoss) {
+      const maxHp = Math.round(180 * factor);
       s.enemies = [
         {
-          id: this.nextEntityId++,
+          id: this.nextId++,
           kind: 'boss',
-          name: biome.bossName,
+          name: zone.bossName,
           isBoss: true,
           x: ARENA_WIDTH + 34,
-          y: GROUND_Y,
           hp: maxHp,
           maxHp,
-          atk: Math.round(14 * Math.pow(1.25, s.stage - 1)),
-          attackCooldown: 1.5,
-          attackInterval: 2.25,
-          windup: 0,
-          windupDuration: 0.78,
-          stunTimer: 0,
+          atk: Math.round(14 * Math.pow(1.24, s.stage - 1)),
+          attackTimer: 1.4,
+          attackInterval: 2.1,
           hitFlash: 0,
-          scale: 1.65,
           animTime: 0,
-          goldReward: Math.round(45 * Math.pow(1.32, s.stage - 1)),
-          expReward: Math.round(36 * Math.pow(1.22, s.stage - 1)),
-          soulReward: Math.max(1, Math.floor(s.stage * 0.65) + 1),
+          goldReward: Math.round(55 * Math.pow(1.3, s.stage - 1)),
+          oreReward: Math.max(4, Math.round(4 + s.stage * 1.6)),
         },
       ];
-      s.bannerText = `⚠ BOSS · ${biome.bossName}`;
+      s.bannerText = `⚠ BOSS · ${zone.bossName}`;
       s.bannerTimer = 1.9;
-      this.emit('bossWarning', biome.bossName);
+      this.emit('bossWarning');
       return;
     }
 
     const count = Math.min(4, 2 + Math.floor((s.stage + s.wave) / 4));
     s.enemies = [];
     for (let i = 0; i < count; i++) {
-      const kind = biome.enemyPool[(s.wave + i) % biome.enemyPool.length];
-      const hpMult = kind === 'knight' || kind === 'gargoyle' ? 1.25 : kind === 'bat' ? 0.82 : 1;
-      const maxHp = Math.round(42 * scaleFactor * hpMult);
+      const kind = zone.enemyPool[(s.wave + i) % zone.enemyPool.length];
+      const maxHp = Math.round(44 * factor * (kind === 'golem' || kind === 'wyvern' ? 1.25 : 1));
       s.enemies.push({
-        id: this.nextEntityId++,
+        id: this.nextId++,
         kind,
         name: ENEMY_NAMES[kind],
         isBoss: false,
-        x: ARENA_WIDTH + 24 + i * 38,
-        y: GROUND_Y,
+        x: ARENA_WIDTH + 24 + i * 36,
         hp: maxHp,
         maxHp,
-        atk: Math.round(6.5 * Math.pow(1.22, s.stage - 1)),
-        attackCooldown: 0.9 + i * 0.4,
-        attackInterval: 1.9,
-        windup: 0,
-        windupDuration: 0.65,
-        stunTimer: 0,
+        atk: Math.round(6.5 * Math.pow(1.21, s.stage - 1)),
+        attackTimer: 1.0 + i * 0.35,
+        attackInterval: 1.95,
         hitFlash: 0,
-        scale: 1,
-        animTime: i * 0.6,
-        goldReward: Math.round(8 * Math.pow(1.28, s.stage - 1)),
-        expReward: Math.round(10 * Math.pow(1.2, s.stage - 1)),
-        soulReward: 0,
+        animTime: i * 0.5,
+        goldReward: Math.round(9 * Math.pow(1.26, s.stage - 1)),
+        oreReward: Math.max(1, Math.round(1 + s.stage * 0.35)),
       });
     }
   }
 
-  public getUpgradeBatchInfo(key: UpgradeKey, mode: BuyMode = this.state.buyMode): {
-    count: number;
-    totalCost: number;
-    canAfford: boolean;
-  } {
-    const def = UPGRADES.find((u) => u.key === key)!;
-    let level = this.state.upgrades[key];
-    let totalCost = 0;
-    let count = 0;
-
-    if (mode === 'MAX') {
-      while (count < 100) {
-        const nextCost = getUpgradeCost(def, level);
-        if (totalCost + nextCost > this.state.gold) break;
-        totalCost += nextCost;
-        level += 1;
-        count += 1;
-      }
-      if (count === 0) {
-        return { count: 1, totalCost: getUpgradeCost(def, level), canAfford: false };
-      }
-      return { count, totalCost, canAfford: true };
-    }
-
-    for (let i = 0; i < mode; i++) {
-      totalCost += getUpgradeCost(def, level + i);
-    }
-    return {
-      count: mode,
-      totalCost,
-      canAfford: this.state.gold >= totalCost,
-    };
+  private addMorale(amount: number): void {
+    if (this.state.rallyTimer > 0) return;
+    this.state.morale = Math.min(100, this.state.morale + amount);
   }
 
-  public buyUpgrade(key: UpgradeKey): boolean {
-    const batch = this.getUpgradeBatchInfo(key, this.state.buyMode);
-    if (!batch.canAfford) return false;
-    this.state.gold -= batch.totalCost;
-    this.state.upgrades[key] += batch.count;
-
-    const stats = this.computeStats();
-    const prevMax = this.state.heroMaxHp;
-    this.state.heroMaxHp = stats.maxHp;
-    if (stats.maxHp > prevMax) {
-      this.state.heroHp += stats.maxHp - prevMax;
+  private getFrontEnemy(): EnemyEntity | null {
+    if (this.state.enemies.length === 0) return null;
+    let front = this.state.enemies[0];
+    for (const e of this.state.enemies) {
+      if (e.x < front.x) front = e;
     }
-
-    this.emit('upgrade');
-    return true;
+    return front;
   }
 
-  public buyRelic(key: RelicKey): boolean {
-    const def = RELICS.find((r) => r.key === key)!;
-    const lv = this.state.relics[key];
-    if (lv >= def.maxLevel) return false;
-    const cost = getRelicCost(def, lv);
-    if (this.state.soul < cost) return false;
-
-    this.state.soul -= cost;
-    this.state.relics[key] += 1;
-    this.emit('upgrade');
-    return true;
-  }
-
-  public openAwakeningIfReady(): boolean {
-    const s = this.state;
-    if (s.activeCardChoices || s.pendingAwakenings <= 0) return false;
-
-    const available = AWAKENING_CARDS.filter((card) => (s.cards[card.id] ?? 0) < card.maxStack);
-    if (available.length === 0) {
-      s.pendingAwakenings = 0;
-      return false;
-    }
-
-    const pool = [...available];
-    const picked: AwakeningCardDef[] = [];
-    while (picked.length < 3 && pool.length > 0) {
-      const idx = Math.floor(Math.random() * pool.length);
-      picked.push(pool.splice(idx, 1)[0]);
-    }
-    s.activeCardChoices = picked;
-    return true;
-  }
-
-  public chooseAwakeningCard(cardId: string): boolean {
-    const s = this.state;
-    if (!s.activeCardChoices) return false;
-    const chosen = s.activeCardChoices.find((c) => c.id === cardId);
-    if (!chosen) return false;
-
-    s.cards[cardId] = (s.cards[cardId] ?? 0) + 1;
-    s.pendingAwakenings = Math.max(0, s.pendingAwakenings - 1);
-    s.activeCardChoices = null;
-    s.bannerText = `각성 획득 · ${chosen.name}`;
-    s.bannerTimer = 1.8;
-    this.emit('levelUp');
-
-    if (s.pendingAwakenings > 0) {
-      this.openAwakeningIfReady();
-    }
-    return true;
-  }
-
-  private spawnText(
-    x: number,
-    y: number,
-    text: string,
-    color: string,
-    size: number,
-    bold = false
-  ): void {
+  private spawnText(x: number, y: number, text: string, color: string, size: number, bold = false): void {
     this.state.floatingTexts.push({
-      id: this.nextEntityId++,
+      id: this.nextId++,
       x,
       y,
-      vy: -36,
+      vy: -34,
       text,
       color,
       size,
@@ -985,18 +764,37 @@ export class BangchiEngine {
 
   private spawnBurst(x: number, y: number, color: string, count: number): void {
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 28 + Math.random() * 88;
+      const a = Math.random() * Math.PI * 2;
+      const sp = 25 + Math.random() * 80;
       this.state.particles.push({
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 35,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 30,
         size: 2 + Math.floor(Math.random() * 2),
         color,
-        life: 0.35 + Math.random() * 0.25,
-        maxLife: 0.6,
+        life: 0.32 + Math.random() * 0.22,
+        maxLife: 0.54,
       });
+    }
+  }
+
+  private tickParticlesAndTexts(dt: number): void {
+    const s = this.state;
+    for (let i = s.floatingTexts.length - 1; i >= 0; i--) {
+      const ft = s.floatingTexts[i];
+      ft.y += ft.vy * dt;
+      ft.vy *= 0.94;
+      ft.life -= dt;
+      if (ft.life <= 0) s.floatingTexts.splice(i, 1);
+    }
+    for (let i = s.particles.length - 1; i >= 0; i--) {
+      const p = s.particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 115 * dt;
+      p.life -= dt;
+      if (p.life <= 0) s.particles.splice(i, 1);
     }
   }
 }

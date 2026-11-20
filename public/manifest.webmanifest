@@ -1,12 +1,12 @@
 {
-  "name": "방치 나이트 — Bangchi Knight",
+  "name": "방치 나이트 — 왕국 원정 기사단 RPG",
   "short_name": "방치 나이트",
-  "description": "다크 판타지 픽셀 아트 방치형 로그라이트 액션 RPG",
+  "description": "전술 진형 전환, 실시간 대장간 장비 단조, 원정대 동료 합류를 브라우저에서 바로 즐기는 픽셀 방치형 RPG",
   "start_url": "./#play",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#08090f",
-  "theme_color": "#08090f",
+  "background_color": "#0f172a",
+  "theme_color": "#1e3a8a",
   "icons": [
     {
       "src": "./favicon.svg",

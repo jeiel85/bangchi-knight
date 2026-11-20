@@ -1,350 +1,401 @@
 import type {
-  AwakeningCardDef,
-  BiomeDef,
-  RelicDef,
-  SkillDef,
-  UpgradeDef,
+  CompanionDef,
+  EquipItem,
+  EquipSlot,
+  FacilityDef,
+  ItemRarity,
+  StanceDef,
+  TrainingDef,
+  ZoneDef,
 } from './types';
 
-export const BIOMES: BiomeDef[] = [
+export const ZONES: ZoneDef[] = [
   {
-    id: 'catacomb',
-    name: '어둠의 지하묘지',
-    subtitle: 'DARK CATACOMB',
-    skyTop: '#080912',
-    skyBottom: '#13162b',
-    pillarColor: '#1b1f38',
-    torchColor: '#f59e0b',
-    floorTop: '#2a304d',
-    floorBase: '#151829',
-    moonTint: '#f5b942',
-    enemyPool: ['slime', 'skeleton', 'bat'],
-    bossName: '해골 군주 말로크',
+    id: 'dawnstep',
+    name: '여명의 초원',
+    subtitle: 'DAWNSTEP MEADOW',
+    skyTop: '#1d4ed8',
+    skyBottom: '#60a5fa',
+    hillFar: '#1e3a5f',
+    hillNear: '#15803d',
+    roadTop: '#a16207',
+    roadBase: '#713f12',
+    sunColor: '#fde047',
+    accent: '#38bdf8',
+    enemyPool: ['goblin', 'boar'],
+    bossName: '초원 족장 그루그',
   },
   {
-    id: 'blood-hall',
-    name: '피의 회랑',
-    subtitle: 'CRIMSON CORRIDOR',
-    skyTop: '#12070c',
-    skyBottom: '#26101b',
-    pillarColor: '#331524',
-    torchColor: '#fb7185',
-    floorTop: '#452031',
-    floorBase: '#210e17',
-    moonTint: '#fb7185',
-    enemyPool: ['bat', 'skeleton', 'knight'],
-    bossName: '진홍의 기사단장',
+    id: 'amber-canyon',
+    name: '황혼의 협곡',
+    subtitle: 'AMBER CANYON',
+    skyTop: '#7c2d12',
+    skyBottom: '#fb923c',
+    hillFar: '#78350f',
+    hillNear: '#9a3412',
+    roadTop: '#b45309',
+    roadBase: '#451a03',
+    sunColor: '#fed7aa',
+    accent: '#fb923c',
+    enemyPool: ['bandit', 'scorpion', 'goblin'],
+    bossName: '협곡 약탈왕 바르카',
   },
   {
-    id: 'frost-watch',
-    name: '서리 망루',
-    subtitle: 'FROSTBASTION',
-    skyTop: '#071019',
-    skyBottom: '#102436',
-    pillarColor: '#1a364f',
-    torchColor: '#38bdf8',
-    floorTop: '#294c6b',
-    floorBase: '#102233',
-    moonTint: '#7dd3fc',
-    enemyPool: ['skeleton', 'knight', 'gargoyle'],
-    bossName: '빙결의 감시자',
+    id: 'mirewood',
+    name: '안개 늪지대',
+    subtitle: 'MIREWOOD MARSH',
+    skyTop: '#0f292e',
+    skyBottom: '#115e59',
+    hillFar: '#134e4a',
+    hillNear: '#065f46',
+    roadTop: '#3f6212',
+    roadBase: '#1a2e05',
+    sunColor: '#99f6e4',
+    accent: '#2dd4bf',
+    enemyPool: ['bogling', 'scorpion', 'bandit'],
+    bossName: '늪의 거수 보그',
   },
   {
-    id: 'abyss-altar',
-    name: '심연의 제단',
-    subtitle: 'ALTAR OF THE ABYSS',
-    skyTop: '#0d0718',
-    skyBottom: '#201138',
-    pillarColor: '#2d1a4d',
-    torchColor: '#c084fc',
-    floorTop: '#3e2766',
-    floorBase: '#190e2e',
-    moonTint: '#c084fc',
-    enemyPool: ['knight', 'gargoyle', 'bat'],
-    bossName: '심연의 대사제',
+    id: 'frostpeak',
+    name: '설원의 요새',
+    subtitle: 'FROSTPEAK KEEP',
+    skyTop: '#0f172a',
+    skyBottom: '#334155',
+    hillFar: '#475569',
+    hillNear: '#64748b',
+    roadTop: '#94a3b8',
+    roadBase: '#334155',
+    sunColor: '#e0f2fe',
+    accent: '#93c5fd',
+    enemyPool: ['golem', 'bandit', 'boar'],
+    bossName: '백설 거인 요툰',
   },
   {
-    id: 'eclipse-throne',
-    name: '흑월의 왕좌',
-    subtitle: 'ECLIPSE THRONE',
-    skyTop: '#07070b',
-    skyBottom: '#1b1421',
-    pillarColor: '#2b202e',
-    torchColor: '#fbbf24',
-    floorTop: '#42312a',
-    floorBase: '#171115',
-    moonTint: '#fde047',
-    enemyPool: ['knight', 'gargoyle', 'skeleton'],
-    bossName: '흑월의 파괴신',
-  },
-];
-
-export const KNIGHT_TIERS = [
-  { name: '견습 흑기사', minStage: 1, capeColor: '#b91c1c', auraColor: '#f5b942' },
-  { name: '월광 검사', minStage: 4, capeColor: '#2563eb', auraColor: '#38bdf8' },
-  { name: '심연의 발키리', minStage: 8, capeColor: '#7c3aed', auraColor: '#c084fc' },
-  { name: '흑월의 군주', minStage: 13, capeColor: '#f59e0b', auraColor: '#fde047' },
-];
-
-export const UPGRADES: UpgradeDef[] = [
-  {
-    key: 'atk',
-    name: '공격력',
-    shortDesc: '기본 공격력 +4.5',
-    baseCost: 12,
-    costGrowth: 1.155,
-    icon: '⚔️',
-  },
-  {
-    key: 'atkSpeed',
-    name: '공격속도',
-    shortDesc: '공격속도 +5%',
-    baseCost: 18,
-    costGrowth: 1.185,
-    icon: '💨',
-  },
-  {
-    key: 'crit',
-    name: '치명타',
-    shortDesc: '치명 확률 +2% / 피해 +8%',
-    baseCost: 22,
-    costGrowth: 1.18,
-    icon: '💥',
-  },
-  {
-    key: 'maxHp',
-    name: '최대 체력',
-    shortDesc: '최대 체력 +28',
-    baseCost: 14,
-    costGrowth: 1.15,
-    icon: '🛡️',
-  },
-  {
-    key: 'regen',
-    name: '체력 재생',
-    shortDesc: '초당 회복 +1.6 + 0.25%',
-    baseCost: 16,
-    costGrowth: 1.16,
-    icon: '💚',
-  },
-  {
-    key: 'goldGain',
-    name: '골드 획득',
-    shortDesc: '골드 획득량 +16%',
-    baseCost: 24,
-    costGrowth: 1.19,
-    icon: '🪙',
+    id: 'cinder-citadel',
+    name: '용암 성채',
+    subtitle: 'CINDER CITADEL',
+    skyTop: '#290b0b',
+    skyBottom: '#7f1d1d',
+    hillFar: '#450a0a',
+    hillNear: '#571515',
+    roadTop: '#44403c',
+    roadBase: '#1c1917',
+    sunColor: '#fb7185',
+    accent: '#f87171',
+    enemyPool: ['wyvern', 'golem', 'bandit'],
+    bossName: '화염 군주 이그니스',
   },
 ];
 
-export const RELICS: RelicDef[] = [
+export const STANCES: StanceDef[] = [
   {
-    key: 'soulBlade',
-    name: '영혼의 검',
-    desc: '영구 공격력 +25% / Lv',
-    baseCost: 2,
-    costStep: 2,
-    maxLevel: 25,
-    icon: '🗡️',
-  },
-  {
-    key: 'goldenGrace',
-    name: '황금 축복',
-    desc: '영구 골드 획득 +30% / Lv',
-    baseCost: 2,
-    costStep: 2,
-    maxLevel: 25,
-    icon: '👑',
-  },
-  {
-    key: 'counterMastery',
-    name: '반격의 극의',
-    desc: '일섬 반격 피해 +45% / Lv',
-    baseCost: 3,
-    costStep: 3,
-    maxLevel: 20,
-    icon: '⚡',
-  },
-  {
-    key: 'swiftStart',
-    name: '초기 축복',
-    desc: '환생 시 시작 골드 +120 / Lv',
-    baseCost: 2,
-    costStep: 2,
-    maxLevel: 15,
-    icon: '✨',
-  },
-];
-
-export const SKILLS: SkillDef[] = [
-  {
-    id: 'moonSlash',
-    name: '월광참',
-    desc: '전방 적에게 280% 광역 검기',
-    cooldown: 5.5,
-    unlockStage: 1,
-    color: '#f5b942',
-    icon: '🌙',
-  },
-  {
-    id: 'flashDash',
-    name: '일섬 돌진',
-    desc: '선두 적에게 360% 반격 + 1.4초 기절',
-    cooldown: 7.5,
-    unlockStage: 1,
-    color: '#38bdf8',
-    icon: '⚡',
-  },
-  {
-    id: 'eclipseAegis',
-    name: '흑월 방패',
-    desc: '최대 체력 35% 보호막 & 20% 회복',
-    cooldown: 10.0,
-    unlockStage: 2,
-    color: '#34d399',
-    icon: '🛡️',
-  },
-  {
-    id: 'abyssStorm',
-    name: '심연 폭풍',
-    desc: '모든 적에게 520% 벼락 연타',
-    cooldown: 13.0,
-    unlockStage: 3,
-    color: '#c084fc',
-    icon: '🌩️',
-  },
-];
-
-export const AWAKENING_CARDS: AwakeningCardDef[] = [
-  {
-    id: 'vampiric_edge',
-    name: '흡혈의 칼날',
-    rarity: 'rare',
-    desc: '가한 피해의 5%만큼 체력을 회복합니다.',
-    maxStack: 5,
-    icon: '🩸',
-    tag: '생존',
-  },
-  {
-    id: 'chain_lightning',
-    name: '연쇄 번개',
-    rarity: 'epic',
-    desc: '공격 시 28% 확률로 주변 적에게 110% 연쇄 피해.',
-    maxStack: 4,
-    icon: '⚡',
-    tag: '광역',
-  },
-  {
-    id: 'counter_sage',
-    name: '일섬의 달인',
-    rarity: 'epic',
-    desc: '일섬 반격 피해 +60%, 자동 반격 발동률 증가.',
-    maxStack: 5,
-    icon: '⚔️',
-    tag: '반격',
-  },
-  {
-    id: 'executioner',
-    name: '처형자의 의지',
-    rarity: 'rare',
-    desc: '체력 40% 이하의 적에게 추가 피해 +45%.',
-    maxStack: 4,
-    icon: '💀',
-    tag: '폭딜',
-  },
-  {
-    id: 'berserk_blood',
-    name: '광전사의 피',
-    rarity: 'common',
-    desc: '기본 공격력 +22% 증폭.',
-    maxStack: 8,
+    id: 'vanguard',
+    name: '돌격',
+    shortDesc: '공격 +35% · 공속 +20%',
     icon: '🔥',
-    tag: '화력',
+    color: '#f97316',
+    atkMult: 1.35,
+    apsMult: 1.2,
+    dmgTakenMult: 1.18,
+    lootMult: 1.0,
+    shieldRegenRatio: 0,
   },
   {
-    id: 'gale_blade',
-    name: '신속 발도',
-    rarity: 'common',
-    desc: '공격속도 +18% 상승.',
-    maxStack: 6,
-    icon: '💨',
-    tag: '속도',
-  },
-  {
-    id: 'golden_hunter',
-    name: '황금 사냥꾼',
-    rarity: 'common',
-    desc: '처치 골드 획득량 +35% 증가.',
-    maxStack: 6,
-    icon: '🪙',
-    tag: '경제',
-  },
-  {
-    id: 'boss_slayer',
-    name: '보스 학살자',
-    rarity: 'rare',
-    desc: '보스 몬스터 대상 최종 피해 +40%.',
-    maxStack: 5,
-    icon: '👑',
-    tag: '보스',
-  },
-  {
-    id: 'eclipse_overdrive',
-    name: '흑월 가속',
-    rarity: 'legendary',
-    desc: '흑월 폭주 충전 속도 +45% & 치명타 피해 +35%.',
-    maxStack: 3,
-    icon: '🌑',
-    tag: '폭주',
-  },
-  {
-    id: 'iron_bastion',
-    name: '철벽 수호',
-    rarity: 'common',
-    desc: '최대 체력 +30% 및 초당 체력 재생 강화.',
-    maxStack: 6,
+    id: 'bulwark',
+    name: '철벽',
+    shortDesc: '피해 -40% · 보호막 생성',
     icon: '🛡️',
-    tag: '방어',
+    color: '#38bdf8',
+    atkMult: 0.92,
+    apsMult: 0.95,
+    dmgTakenMult: 0.6,
+    lootMult: 1.0,
+    shieldRegenRatio: 0.045,
   },
   {
-    id: 'keen_edge',
-    name: '치명적 관통',
-    rarity: 'rare',
-    desc: '치명타 확률 +8%, 치명타 피해 +25%.',
-    maxStack: 5,
-    icon: '🎯',
-    tag: '치명',
-  },
-  {
-    id: 'moon_resonance',
-    name: '월광 공명',
-    rarity: 'legendary',
-    desc: '공격력 +28%, 공격속도 +12%, 보스 피해 +25%.',
-    maxStack: 3,
-    icon: '✨',
-    tag: '전설',
+    id: 'plunder',
+    name: '약탈',
+    shortDesc: '골드/광석 +55%',
+    icon: '💰',
+    color: '#facc15',
+    atkMult: 1.05,
+    apsMult: 1.08,
+    dmgTakenMult: 1.0,
+    lootMult: 1.55,
+    shieldRegenRatio: 0,
   },
 ];
 
-export function getBiomeForStage(stage: number): BiomeDef {
-  const index = Math.floor((stage - 1) / 3) % BIOMES.length;
-  return BIOMES[index];
+export const TRAININGS: TrainingDef[] = [
+  {
+    key: 'swordplay',
+    name: '기사단 검술',
+    desc: '기본 공격력 +5 / 치명 확률 +0.6%',
+    baseCost: 15,
+    growth: 1.18,
+    icon: '⚔️',
+  },
+  {
+    key: 'fortitude',
+    name: '강철 체력 단련',
+    desc: '최대 체력 +32 / 초당 회복 +2.2',
+    baseCost: 15,
+    growth: 1.17,
+    icon: '❤️',
+  },
+  {
+    key: 'logistics',
+    name: '전리품 보급술',
+    desc: '골드 & 광석 획득 +15%',
+    baseCost: 22,
+    growth: 1.2,
+    icon: '🎒',
+  },
+];
+
+export const COMPANIONS: CompanionDef[] = [
+  {
+    id: 'ranger',
+    name: '숲의 궁수 리아',
+    role: '원거리 관통 연사',
+    desc: '후방에서 빠르게 화살을 날려 적을 견제합니다.',
+    unlockCost: 45,
+    baseUpgradeCost: 30,
+    color: '#22c55e',
+    icon: '🏹',
+    interval: 1.15,
+  },
+  {
+    id: 'pyro',
+    name: '불꽃 마법사 카인',
+    role: '광역 화염구 폭발',
+    desc: '강력한 화염구를 던져 모든 적에게 광역 피해를 줍니다.',
+    unlockCost: 160,
+    baseUpgradeCost: 75,
+    color: '#f97316',
+    icon: '🔮',
+    interval: 2.35,
+  },
+  {
+    id: 'banneret',
+    name: '군악 성기사 엘렌',
+    role: '전군 치유 & 사기 증폭',
+    desc: '주기적으로 체력을 회복하고 진격 나팔 사기를 채웁니다.',
+    unlockCost: 380,
+    baseUpgradeCost: 130,
+    color: '#facc15',
+    icon: '🎺',
+    interval: 3.1,
+  },
+];
+
+export const FACILITIES: FacilityDef[] = [
+  {
+    key: 'royalForge',
+    name: '왕립 대장간',
+    desc: '모든 장비 성능 영구 +20% / Lv',
+    baseCost: 2,
+    step: 2,
+    maxLevel: 20,
+    icon: '🔨',
+  },
+  {
+    key: 'warAcademy',
+    name: '기사단 훈련장',
+    desc: '기사 & 원정대 공격력 영구 +25% / Lv',
+    baseCost: 2,
+    step: 2,
+    maxLevel: 20,
+    icon: '🏛️',
+  },
+  {
+    key: 'supplyWagon',
+    name: '왕실 보급 마차',
+    desc: '광석 & 골드 획득 영구 +30% / Lv',
+    baseCost: 2,
+    step: 2,
+    maxLevel: 20,
+    icon: '🪙',
+  },
+  {
+    key: 'guildHall',
+    name: '용병 길드 회관',
+    desc: '귀환 시 시작 골드 +120 & 광석 +12 / Lv',
+    baseCost: 3,
+    step: 3,
+    maxLevel: 15,
+    icon: '🚩',
+  },
+];
+
+export const RARITY_CONFIG: Record<
+  ItemRarity,
+  { label: string; color: string; mult: number; weightBase: number }
+> = {
+  common: { label: '일반', color: '#cbd5e1', mult: 1.0, weightBase: 55 },
+  uncommon: { label: '고급', color: '#4ade80', mult: 1.28, weightBase: 28 },
+  rare: { label: '희귀', color: '#38bdf8', mult: 1.65, weightBase: 12 },
+  epic: { label: '영웅', color: '#c084fc', mult: 2.15, weightBase: 4 },
+  mythic: { label: '신화', color: '#facc15', mult: 2.95, weightBase: 1 },
+};
+
+const ITEM_NAMES: Record<EquipSlot, Record<ItemRarity, string[]>> = {
+  weapon: {
+    common: ['수련용 철검', '보병 브로드소드'],
+    uncommon: ['강철 원정검', '단조 롱소드'],
+    rare: ['청기사 기사검', '바람가르기 대검'],
+    epic: ['태양불꽃 클레이모어', '폭풍강철 명검'],
+    mythic: ['왕국 수호자의 성검', '불멸의 여명검'],
+  },
+  shield: {
+    common: ['참나무 둥근방패', '철테 카이트실드'],
+    uncommon: ['왕국 보병 방패', '강화 타워실드'],
+    rare: ['사자문장 방패', '청강 기사 방패'],
+    epic: ['요새 수호의 아이기스', '불굴의 성벽 방패'],
+    mythic: ['황금 태양의 방벽', '불멸의 왕실 성방패'],
+  },
+  armor: {
+    common: ['가죽 흉갑', '사슬 갑옷'],
+    uncommon: ['철판 경갑', '원정대 판금갑'],
+    rare: ['청기사 풀플레이트', '강철 백작 갑주'],
+    epic: ['용린 화염 갑주', '폭풍요새 중갑'],
+    mythic: ['여명 왕관의 성갑', '황금 사자의 전신갑'],
+  },
+};
+
+export const SLOT_META: Record<EquipSlot, { label: string; statLabel: string; icon: string }> = {
+  weapon: { label: '무기', statLabel: '공격력', icon: '🗡️' },
+  shield: { label: '방패', statLabel: '최대 체력', icon: '🛡️' },
+  armor: { label: '갑옷', statLabel: '방어력', icon: '🦺' },
+};
+
+export function createStarterEquipment(): Record<EquipSlot, EquipItem> {
+  return {
+    weapon: {
+      id: 'init-w',
+      slot: 'weapon',
+      name: '수련용 철검',
+      rarity: 'common',
+      level: 1,
+      power: 10,
+      bonusLabel: '치명 +2%',
+      bonusStat: 'crit',
+      bonusValue: 0.02,
+    },
+    shield: {
+      id: 'init-s',
+      slot: 'shield',
+      name: '참나무 둥근방패',
+      rarity: 'common',
+      level: 1,
+      power: 55,
+      bonusLabel: '체력 +5%',
+      bonusStat: 'hp',
+      bonusValue: 0.05,
+    },
+    armor: {
+      id: 'init-a',
+      slot: 'armor',
+      name: '가죽 흉갑',
+      rarity: 'common',
+      level: 1,
+      power: 4,
+      bonusLabel: '골드 +5%',
+      bonusStat: 'gold',
+      bonusValue: 0.05,
+    },
+  };
 }
 
-export function getUpgradeCost(def: UpgradeDef, currentLevel: number): number {
-  return Math.floor(def.baseCost * Math.pow(def.costGrowth, currentLevel));
+export function getZoneForStage(stage: number): ZoneDef {
+  return ZONES[Math.floor((stage - 1) / 3) % ZONES.length];
 }
 
-export function getRelicCost(def: RelicDef, currentLevel: number): number {
-  return def.baseCost + currentLevel * def.costStep;
+export function getForgeLevel(forgeExp: number): number {
+  return Math.floor(Math.sqrt(forgeExp / 3)) + 1;
 }
 
-export function getKnightTier(stage: number): { name: string; index: number; capeColor: string; auraColor: string } {
-  let result = 0;
-  for (let i = 0; i < KNIGHT_TIERS.length; i++) {
-    if (stage >= KNIGHT_TIERS[i].minStage) {
-      result = i;
+export function getForgeOreCost(forgeLevel: number): number {
+  return Math.max(4, 4 + Math.floor((forgeLevel - 1) * 1.6));
+}
+
+export function getTrainingCost(def: TrainingDef, level: number): number {
+  return Math.floor(def.baseCost * Math.pow(def.growth, level));
+}
+
+export function getCompanionCost(def: CompanionDef, level: number): number {
+  if (level === 0) return def.unlockCost;
+  return Math.floor(def.baseUpgradeCost * Math.pow(1.24, level - 1));
+}
+
+export function getFacilityCost(def: FacilityDef, level: number): number {
+  return def.baseCost + level * def.step;
+}
+
+export function rollForgedItem(stage: number, forgeLevel: number, uid: string): EquipItem {
+  const slots: EquipSlot[] = ['weapon', 'shield', 'armor'];
+  const slot = slots[Math.floor(Math.random() * slots.length)];
+
+  // Higher forge level shifts weights toward rare/epic/mythic
+  const weights: Array<{ r: ItemRarity; w: number }> = [
+    { r: 'common', w: Math.max(12, 56 - forgeLevel * 4.2) },
+    { r: 'uncommon', w: 28 + Math.min(12, forgeLevel * 0.8) },
+    { r: 'rare', w: 12 + forgeLevel * 2.1 },
+    { r: 'epic', w: 3.5 + forgeLevel * 1.15 },
+    { r: 'mythic', w: 0.8 + forgeLevel * 0.45 },
+  ];
+
+  const totalW = weights.reduce((acc, x) => acc + x.w, 0);
+  let pick = Math.random() * totalW;
+  let rarity: ItemRarity = 'common';
+  for (const entry of weights) {
+    pick -= entry.w;
+    if (pick <= 0) {
+      rarity = entry.r;
+      break;
     }
   }
-  return { ...KNIGHT_TIERS[result], index: result };
+
+  const cfg = RARITY_CONFIG[rarity];
+  const itemLevel = Math.max(1, stage + Math.floor(forgeLevel * 0.6));
+  const variance = 0.92 + Math.random() * 0.18;
+
+  let power = 10;
+  if (slot === 'weapon') {
+    power = Math.round((11 + itemLevel * 5.8) * cfg.mult * variance);
+  } else if (slot === 'shield') {
+    power = Math.round((55 + itemLevel * 28) * cfg.mult * variance);
+  } else {
+    power = Math.round((4 + itemLevel * 2.4) * cfg.mult * variance);
+  }
+
+  const bonusChoices: Array<{ stat: EquipItem['bonusStat']; label: string; val: number }> = [
+    { stat: 'crit', label: `치명 +${Math.round(3 * cfg.mult)}%`, val: 0.03 * cfg.mult },
+    { stat: 'speed', label: `공속 +${Math.round(4 * cfg.mult)}%`, val: 0.04 * cfg.mult },
+    { stat: 'gold', label: `골드 +${Math.round(8 * cfg.mult)}%`, val: 0.08 * cfg.mult },
+    { stat: 'hp', label: `체력 +${Math.round(7 * cfg.mult)}%`, val: 0.07 * cfg.mult },
+  ];
+  const bonus = bonusChoices[Math.floor(Math.random() * bonusChoices.length)];
+  const names = ITEM_NAMES[slot][rarity];
+  const name = names[Math.floor(Math.random() * names.length)];
+
+  return {
+    id: uid,
+    slot,
+    name,
+    rarity,
+    level: itemLevel,
+    power,
+    bonusLabel: bonus.label,
+    bonusStat: bonus.stat,
+    bonusValue: bonus.val,
+  };
+}
+
+export function getKnightRankTitle(highestStage: number): string {
+  if (highestStage >= 13) return '왕국 대장군';
+  if (highestStage >= 9) return '원정 기사단장';
+  if (highestStage >= 5) return '청강 정예기사';
+  if (highestStage >= 3) return '국경 수호기사';
+  return '견습 원정기사';
 }

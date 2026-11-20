@@ -1,67 +1,87 @@
-export type UpgradeKey = 'atk' | 'atkSpeed' | 'crit' | 'maxHp' | 'regen' | 'goldGain';
+export type StanceId = 'vanguard' | 'bulwark' | 'plunder';
 
-export type RelicKey = 'soulBlade' | 'goldenGrace' | 'counterMastery' | 'swiftStart';
+export type EquipSlot = 'weapon' | 'shield' | 'armor';
 
-export type SkillId = 'moonSlash' | 'flashDash' | 'eclipseAegis' | 'abyssStorm';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'mythic';
 
-export type CardRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export type TrainingKey = 'swordplay' | 'fortitude' | 'logistics';
 
-export type EnemyKind = 'slime' | 'skeleton' | 'bat' | 'knight' | 'gargoyle' | 'boss';
+export type CompanionId = 'ranger' | 'pyro' | 'banneret';
 
-export type BuyMode = 1 | 10 | 'MAX';
+export type FacilityKey = 'royalForge' | 'warAcademy' | 'supplyWagon' | 'guildHall';
 
-export interface BiomeDef {
+export type EnemyKind = 'goblin' | 'boar' | 'bandit' | 'scorpion' | 'bogling' | 'golem' | 'wyvern' | 'boss';
+
+export interface ZoneDef {
   id: string;
   name: string;
   subtitle: string;
   skyTop: string;
   skyBottom: string;
-  pillarColor: string;
-  torchColor: string;
-  floorTop: string;
-  floorBase: string;
-  moonTint: string;
+  hillFar: string;
+  hillNear: string;
+  roadTop: string;
+  roadBase: string;
+  sunColor: string;
+  accent: string;
   enemyPool: EnemyKind[];
   bossName: string;
 }
 
-export interface UpgradeDef {
-  key: UpgradeKey;
+export interface StanceDef {
+  id: StanceId;
   name: string;
   shortDesc: string;
-  baseCost: number;
-  costGrowth: number;
   icon: string;
+  color: string;
+  atkMult: number;
+  apsMult: number;
+  dmgTakenMult: number;
+  lootMult: number;
+  shieldRegenRatio: number;
 }
 
-export interface RelicDef {
-  key: RelicKey;
+export interface EquipItem {
+  id: string;
+  slot: EquipSlot;
+  name: string;
+  rarity: ItemRarity;
+  level: number;
+  power: number; // weapon->atk, shield->maxHp, armor->def/regen
+  bonusLabel: string;
+  bonusStat: 'crit' | 'gold' | 'speed' | 'hp';
+  bonusValue: number;
+}
+
+export interface TrainingDef {
+  key: TrainingKey;
   name: string;
   desc: string;
   baseCost: number;
-  costStep: number;
-  maxLevel: number;
+  growth: number;
   icon: string;
 }
 
-export interface SkillDef {
-  id: SkillId;
+export interface CompanionDef {
+  id: CompanionId;
   name: string;
+  role: string;
   desc: string;
-  cooldown: number;
-  unlockStage: number;
+  unlockCost: number;
+  baseUpgradeCost: number;
   color: string;
   icon: string;
+  interval: number;
 }
 
-export interface AwakeningCardDef {
-  id: string;
+export interface FacilityDef {
+  key: FacilityKey;
   name: string;
-  rarity: CardRarity;
   desc: string;
-  maxStack: number;
+  baseCost: number;
+  step: number;
+  maxLevel: number;
   icon: string;
-  tag: string;
 }
 
 export interface EnemyEntity {
@@ -70,22 +90,27 @@ export interface EnemyEntity {
   name: string;
   isBoss: boolean;
   x: number;
-  y: number;
   hp: number;
   maxHp: number;
   atk: number;
-  attackCooldown: number;
+  attackTimer: number;
   attackInterval: number;
-  /** 0..1 telegraph windup right before attacking; window for perfect counter */
-  windup: number;
-  windupDuration: number;
-  stunTimer: number;
   hitFlash: number;
-  scale: number;
   animTime: number;
   goldReward: number;
-  expReward: number;
-  soulReward: number;
+  oreReward: number;
+}
+
+export interface Projectile {
+  id: number;
+  kind: 'arrow' | 'fireball' | 'healWave';
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  damage: number;
+  color: string;
+  life: number;
 }
 
 export interface FloatingText {
@@ -99,16 +124,6 @@ export interface FloatingText {
   life: number;
   maxLife: number;
   bold?: boolean;
-}
-
-export interface SlashEffect {
-  id: number;
-  x: number;
-  y: number;
-  kind: 'normal' | 'crit' | 'counter' | 'moon' | 'storm' | 'heal';
-  life: number;
-  maxLife: number;
-  radius: number;
 }
 
 export interface Particle {
@@ -128,56 +143,56 @@ export interface ComputedStats {
   critChance: number;
   critMult: number;
   maxHp: number;
+  def: number;
   regenPerSec: number;
   goldMult: number;
-  lifesteal: number;
-  counterMult: number;
-  bossDmgMult: number;
-  chainLightningChance: number;
-  executeBonus: number;
+  oreMult: number;
   dps: number;
-  tierName: string;
-  tierIndex: number;
+  forgeLevel: number;
+  rankTitle: string;
 }
 
 export type GameEventType =
-  | 'slash'
+  | 'hit'
   | 'crit'
-  | 'counter'
-  | 'skill'
+  | 'arrow'
+  | 'fireball'
+  | 'heal'
+  | 'forge'
+  | 'forgeRare'
+  | 'rally'
+  | 'stance'
   | 'bossWarning'
   | 'bossKill'
-  | 'levelUp'
-  | 'feverStart'
   | 'upgrade'
-  | 'heroDie'
-  | 'rebirth';
+  | 'retreat'
+  | 'returnKingdom';
 
 export interface GameEvent {
   type: GameEventType;
-  label?: string;
 }
 
 export interface SaveData {
   version: number;
   stage: number;
   highestStage: number;
-  wave: number; // 1..5 (5 = boss)
+  wave: number;
   gold: number;
-  soul: number;
-  level: number;
-  exp: number;
-  upgrades: Record<UpgradeKey, number>;
-  relics: Record<RelicKey, number>;
-  cards: Record<string, number>;
-  pendingAwakenings: number;
-  autoSkill: boolean;
+  ore: number;
+  medals: number;
+  forgeExp: number;
+  stance: StanceId;
+  equipment: Record<EquipSlot, EquipItem>;
+  training: Record<TrainingKey, number>;
+  companions: Record<CompanionId, number>;
+  facilities: Record<FacilityKey, number>;
   speedMult: 1 | 2;
+  autoRally: boolean;
   soundEnabled: boolean;
   totalKills: number;
-  totalCounters: number;
+  totalForges: number;
+  expeditionReturns: number;
   totalPlaySeconds: number;
-  rebirthCount: number;
   savedAt: number;
 }
 
@@ -186,50 +201,46 @@ export interface GameState {
   highestStage: number;
   wave: number; // 1..5
   gold: number;
-  soul: number;
-  level: number;
-  exp: number;
-  expToNext: number;
+  ore: number;
+  medals: number;
+  forgeExp: number;
 
-  heroX: number;
+  stance: StanceId;
+  equipment: Record<EquipSlot, EquipItem>;
+  pendingForgeItem: EquipItem | null;
+
+  training: Record<TrainingKey, number>;
+  companions: Record<CompanionId, number>;
+  facilities: Record<FacilityKey, number>;
+
   heroHp: number;
   heroMaxHp: number;
   heroShield: number;
-  heroState: 'run' | 'attack' | 'counter' | 'hurt';
-  heroStateTimer: number;
+  heroAction: 'march' | 'swing' | 'hurt';
+  heroActionTimer: number;
   heroAttackTimer: number;
-  heroAnimTime: number;
+  animTime: number;
+  scrollX: number;
 
-  feverGauge: number; // 0..100
-  feverActiveTimer: number;
-  counterCooldown: number;
-  counterFlashTimer: number;
+  companionTimers: Record<CompanionId, number>;
+
+  morale: number; // 0..100
+  rallyTimer: number; // >0 while Warhorn Rally is active
   screenShake: number;
-  scrollOffset: number;
   bannerText: string;
   bannerTimer: number;
 
-  upgrades: Record<UpgradeKey, number>;
-  relics: Record<RelicKey, number>;
-  cards: Record<string, number>;
-  skillCooldowns: Record<SkillId, number>;
-
-  pendingAwakenings: number;
-  activeCardChoices: AwakeningCardDef[] | null;
-
-  autoSkill: boolean;
   speedMult: 1 | 2;
+  autoRally: boolean;
   soundEnabled: boolean;
-  buyMode: BuyMode;
 
   enemies: EnemyEntity[];
+  projectiles: Projectile[];
   floatingTexts: FloatingText[];
-  slashEffects: SlashEffect[];
   particles: Particle[];
 
   totalKills: number;
-  totalCounters: number;
+  totalForges: number;
+  expeditionReturns: number;
   totalPlaySeconds: number;
-  rebirthCount: number;
-  recentDamageWindow: number[];
 }

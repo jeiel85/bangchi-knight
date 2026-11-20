@@ -6,7 +6,7 @@ export interface StorageAdapter {
   removeItem(key: string): void;
 }
 
-const SAVE_KEY = 'bangchi_knight_save_v1';
+const SAVE_KEY = 'bangchi_knight_expedition_v2';
 
 const defaultAdapter: StorageAdapter = {
   getItem: (key) => {
@@ -22,7 +22,7 @@ const defaultAdapter: StorageAdapter = {
         localStorage.setItem(key, value);
       }
     } catch {
-      // Ignore storage quota/privacy mode errors
+      // ignore storage errors
     }
   },
   removeItem: (key) => {
@@ -31,7 +31,7 @@ const defaultAdapter: StorageAdapter = {
         localStorage.removeItem(key);
       }
     } catch {
-      // Ignore
+      // ignore
     }
   },
 };
@@ -41,7 +41,7 @@ export function loadSaveData(adapter: StorageAdapter = defaultAdapter): SaveData
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as SaveData;
-    if (!parsed || typeof parsed.stage !== 'number') return null;
+    if (!parsed || parsed.version !== 2 || !parsed.equipment) return null;
     return parsed;
   } catch {
     return null;

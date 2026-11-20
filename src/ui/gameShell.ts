@@ -1,26 +1,22 @@
 import { sfx } from '../audio/sfx';
 import {
-  AWAKENING_CARDS,
-  KNIGHT_TIERS,
-  RELICS,
-  SKILLS,
-  UPGRADES,
-  getBiomeForStage,
-  getRelicCost,
+  COMPANIONS,
+  FACILITIES,
+  RARITY_CONFIG,
+  SLOT_META,
+  STANCES,
+  TRAININGS,
+  getCompanionCost,
+  getFacilityCost,
+  getTrainingCost,
+  getZoneForStage,
 } from '../engine/data';
 import { ARENA_HEIGHT, ARENA_WIDTH, BangchiEngine } from '../engine/gameEngine';
 import { clearSaveData, loadSaveData, writeSaveData } from '../engine/storage';
-import type { BuyMode, CardRarity, RelicKey, SkillId, UpgradeKey } from '../engine/types';
+import type { CompanionId, EquipSlot, FacilityKey, StanceId, TrainingKey } from '../engine/types';
 import { renderArena } from '../renderer/canvasRenderer';
 
-type TabKey = 'upgrade' | 'build' | 'sanctuary' | 'info';
-
-const RARITY_LABELS: Record<CardRarity, string> = {
-  common: '일반',
-  rare: '희귀',
-  epic: '영웅',
-  legendary: '전설',
-};
+type TabKey = 'forge' | 'squad' | 'kingdom' | 'journal';
 
 function fmtNum(n: number): string {
   if (!Number.isFinite(n)) return '0';
@@ -41,14 +37,13 @@ function fmtTime(sec: number): string {
 }
 
 export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): () => void {
-  const saved = loadSaveData();
-  const engine = new BangchiEngine(saved);
+  const engine = new BangchiEngine(loadSaveData());
   sfx.enabled = engine.state.soundEnabled;
 
-  let activeTab: TabKey = 'upgrade';
-  let lastUiUpdate = 0;
-  let lastSaveTime = performance.now();
-  let lastModalSignature = '';
+  let activeTab: TabKey = 'forge';
+  let lastUiSync = 0;
+  let lastSave = performance.now();
+  let lastForgeSig = '';
 
   root.innerHTML = `
     <div class="game-viewport">
@@ -56,12 +51,12 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <header class="shell-topbar">
           <button class="shell-back-btn" id="back-landing-btn" title="랜딩 페이지로">← 홈</button>
           <div class="stage-cluster">
-            <span class="stage-code" id="hud-stage">STG 1-1</span>
-            <span class="stage-biome" id="hud-biome">어둠의 지하묘지</span>
+            <span class="stage-code" id="hud-stage">STAGE 1-1</span>
+            <span class="stage-biome" id="hud-zone">여명의 초원</span>
           </div>
           <div class="currency-cluster">
             <span class="currency gold" id="hud-gold">🪙 0</span>
-            <span class="currency soul" id="hud-soul">🔮 0</span>
+            <span class="currency ore" id="hud-ore">⛏️ 0</span>
           </div>
         </header>
 
@@ -72,45 +67,47 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
         <div class="hero-hud">
           <div class="hero-badge">
-            <span class="hero-crest">⚔️</span>
+            <span class="hero-crest">🛡️</span>
             <div>
-              <div class="hero-tier-name" id="hud-tier">견습 흑기사</div>
-              <div class="hero-lv" id="hud-lv">LV.1 · EXP 0%</div>
+              <div class="hero-rank" id="hud-rank">견습 원정기사</div>
+              <div class="hero-sub" id="hud-medals">🏅 훈장 0</div>
             </div>
           </div>
           <div class="hero-bars">
             <div class="bar-track hp-track">
               <div class="bar-fill hp-fill" id="hud-hp-fill"></div>
               <div class="bar-fill shield-fill" id="hud-shield-fill"></div>
-              <span class="bar-text" id="hud-hp-text">HP 120 / 120</span>
+              <span class="bar-text" id="hud-hp-text">HP 180 / 180</span>
             </div>
-            <div class="bar-track exp-track">
-              <div class="bar-fill exp-fill" id="hud-exp-fill"></div>
+            <div class="bar-track morale-track">
+              <div class="bar-fill morale-fill" id="hud-morale-fill"></div>
             </div>
           </div>
         </div>
 
         <div class="arena-container">
           <canvas id="game-canvas" width="${ARENA_WIDTH}" height="${ARENA_HEIGHT}"></canvas>
-          <button class="arena-overlay-btn counter-btn" id="btn-counter">
-            <span>⚡ 일섬 반격</span>
-            <small id="counter-sub">READY</small>
-          </button>
-          <button class="arena-overlay-btn fever-btn" id="btn-fever">
-            <span>🌑 흑월</span>
-            <small id="fever-sub">0%</small>
-          </button>
-          <button class="arena-awake-pill hidden" id="btn-open-awakening">
-            🃏 각성 선택 (<span id="awake-count">0</span>)
+          <button class="arena-rally-btn" id="btn-rally">
+            <span>🎺 진격 나팔</span>
+            <small id="rally-sub">20%</small>
           </button>
         </div>
 
-        <div class="action-strip">
-          <div class="skill-bar" id="skill-bar"></div>
+        <div class="tactics-strip">
+          <div class="stance-bar" id="stance-bar">
+            ${STANCES.map(
+              (st) => `
+              <button class="stance-btn" data-stance="${st.id}" title="${st.shortDesc}">
+                <span class="stance-top">${st.icon} ${st.name}</span>
+                <span class="stance-desc">${st.shortDesc}</span>
+              </button>
+            `
+            ).join('')}
+          </div>
           <div class="quick-bar">
-            <button class="quick-btn" id="q-auto">자동</button>
-            <button class="quick-btn" id="q-speed">1x</button>
-            <button class="quick-btn" id="q-sound">소리</button>
+            <button class="quick-btn" id="q-auto">자동나팔</button>
+            <button class="quick-btn" id="q-speed">1배속</button>
+            <button class="quick-btn" id="q-sound">소리 ON</button>
             <button class="quick-btn" id="q-save">저장</button>
           </div>
         </div>
@@ -118,18 +115,14 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <section class="panel-body" id="panel-body"></section>
 
         <nav class="bottom-nav">
-          <button class="nav-tab active" data-tab="upgrade">⚔️<span>강화</span></button>
-          <button class="nav-tab" data-tab="build">🃏<span>빌드</span></button>
-          <button class="nav-tab" data-tab="sanctuary">🏛️<span>성소</span></button>
-          <button class="nav-tab" data-tab="info">📊<span>정보</span></button>
+          <button class="nav-tab active" data-tab="forge">🔨<span>대장간</span></button>
+          <button class="nav-tab" data-tab="squad">👥<span>원정대</span></button>
+          <button class="nav-tab" data-tab="kingdom">🏰<span>왕국</span></button>
+          <button class="nav-tab" data-tab="journal">📜<span>원정일지</span></button>
         </nav>
 
-        <div class="modal-backdrop hidden" id="awakening-modal">
-          <div class="modal-card">
-            <div class="modal-kicker">ROGUELITE AWAKENING</div>
-            <h3>각성 카드 1장을 선택하세요</h3>
-            <div class="card-choice-list" id="card-choice-list"></div>
-          </div>
+        <div class="modal-backdrop hidden" id="forge-modal">
+          <div class="modal-card" id="forge-modal-content"></div>
         </div>
       </div>
     </div>
@@ -138,334 +131,333 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   const canvas = root.querySelector<HTMLCanvasElement>('#game-canvas')!;
   const ctx = canvas.getContext('2d')!;
   const panelBody = root.querySelector<HTMLElement>('#panel-body')!;
-  const skillBar = root.querySelector<HTMLElement>('#skill-bar')!;
-  const awakeningModal = root.querySelector<HTMLElement>('#awakening-modal')!;
-  const cardChoiceList = root.querySelector<HTMLElement>('#card-choice-list')!;
+  const forgeModal = root.querySelector<HTMLElement>('#forge-modal')!;
+  const forgeModalContent = root.querySelector<HTMLElement>('#forge-modal-content')!;
 
-  const unlockAudio = () => sfx.unlock();
-  root.addEventListener('pointerdown', unlockAudio, { once: true });
+  root.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 
   root.querySelector('#back-landing-btn')?.addEventListener('click', () => {
     writeSaveData(engine.toSaveData());
     onBackToLanding();
   });
 
-  root.querySelector('#btn-counter')?.addEventListener('click', () => {
+  root.querySelector('#btn-rally')?.addEventListener('click', () => {
     sfx.unlock();
-    engine.triggerManualCounter();
+    engine.triggerRally();
   });
 
-  root.querySelector('#btn-fever')?.addEventListener('click', () => {
+  root.querySelector('#stance-bar')?.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-stance]');
+    if (!btn) return;
     sfx.unlock();
-    engine.triggerFever();
+    engine.setStance(btn.dataset.stance as StanceId);
+    updateStanceButtons();
   });
 
-  root.querySelector('#btn-open-awakening')?.addEventListener('click', () => {
-    engine.openAwakeningIfReady();
-    renderModalIfNeeded();
-  });
-
-  // Quick toggles
   const qAuto = root.querySelector<HTMLButtonElement>('#q-auto')!;
   const qSpeed = root.querySelector<HTMLButtonElement>('#q-speed')!;
   const qSound = root.querySelector<HTMLButtonElement>('#q-sound')!;
   const qSave = root.querySelector<HTMLButtonElement>('#q-save')!;
 
   qAuto.addEventListener('click', () => {
-    engine.state.autoSkill = !engine.state.autoSkill;
+    engine.state.autoRally = !engine.state.autoRally;
     updateQuickButtons();
   });
-
   qSpeed.addEventListener('click', () => {
     engine.state.speedMult = engine.state.speedMult === 1 ? 2 : 1;
     updateQuickButtons();
   });
-
   qSound.addEventListener('click', () => {
     engine.state.soundEnabled = !engine.state.soundEnabled;
     sfx.enabled = engine.state.soundEnabled;
     updateQuickButtons();
   });
-
   qSave.addEventListener('click', () => {
     writeSaveData(engine.toSaveData());
     qSave.textContent = '완료!';
     setTimeout(() => {
       qSave.textContent = '저장';
-    }, 900);
+    }, 850);
   });
 
-  // Bottom tabs
   root.querySelectorAll<HTMLButtonElement>('.nav-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       const next = btn.dataset.tab as TabKey;
       if (!next) return;
       activeTab = next;
       root.querySelectorAll('.nav-tab').forEach((b) => b.classList.toggle('active', b === btn));
-      renderActiveTab();
+      renderTab();
     });
   });
 
-  // Delegated events inside panelBody
   panelBody.addEventListener('click', (ev) => {
-    const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-action]');
-    if (!target) return;
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-action]');
+    if (!btn) return;
     sfx.unlock();
 
-    const action = target.dataset.action;
-    if (action === 'buy-mode') {
-      const val = target.dataset.mode;
-      engine.state.buyMode = (val === 'MAX' ? 'MAX' : Number(val)) as BuyMode;
-      renderActiveTab();
-    } else if (action === 'buy-upgrade') {
-      const key = target.dataset.key as UpgradeKey;
-      if (engine.buyUpgrade(key)) {
-        renderActiveTab();
+    const action = btn.dataset.action;
+    if (action === 'forge-now') {
+      if (engine.forgeEquipment()) {
+        renderForgeModal();
+        renderTab();
       }
-    } else if (action === 'buy-relic') {
-      const key = target.dataset.key as RelicKey;
-      if (engine.buyRelic(key)) {
-        renderActiveTab();
+    } else if (action === 'buy-training') {
+      if (engine.buyTraining(btn.dataset.key as TrainingKey)) {
+        renderTab();
       }
-    } else if (action === 'rebirth') {
-      if (engine.canRebirth()) {
-        const reward = engine.getRebirthSoulReward();
-        if (window.confirm(`환생하여 영혼 +${reward}개를 획득하고 1스테이지부터 다시 시작할까요?\n(성소 유물과 영혼은 영구 유지됩니다)`)) {
-          engine.performRebirth();
+    } else if (action === 'buy-companion') {
+      if (engine.buyCompanion(btn.dataset.key as CompanionId)) {
+        renderTab();
+      }
+    } else if (action === 'buy-facility') {
+      if (engine.buyFacility(btn.dataset.key as FacilityKey)) {
+        renderTab();
+      }
+    } else if (action === 'kingdom-return') {
+      if (engine.canReturnToKingdom()) {
+        const reward = engine.getReturnMedalReward();
+        if (
+          window.confirm(
+            `왕국으로 귀환하여 훈장 +${reward}개를 획득하고 STAGE 1부터 재출정할까요?\n(훈장과 왕국 영구 시설, 대장간 숙련도는 유지됩니다)`
+          )
+        ) {
+          engine.performKingdomReturn();
           writeSaveData(engine.toSaveData());
-          renderActiveTab();
+          renderTab();
         }
       }
     } else if (action === 'reset-save') {
-      if (window.confirm('모든 진행 기록과 영혼 유물을 초기화할까요?')) {
+      if (window.confirm('모든 원정 기록과 왕국 시설을 초기화할까요?')) {
         clearSaveData();
-        engine.resetForNewGame();
-        renderActiveTab();
+        engine.resetGame();
+        renderTab();
       }
     }
   });
 
-  // Skill bar buttons
-  skillBar.innerHTML = SKILLS.map(
-    (sk) => `
-    <button class="skill-slot" data-skill="${sk.id}" title="${sk.name}: ${sk.desc}">
-      <span class="skill-icon">${sk.icon}</span>
-      <span class="skill-name">${sk.name}</span>
-      <span class="skill-cd" id="cd-${sk.id}"></span>
-    </button>
-  `
-  ).join('');
-
-  skillBar.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-skill]');
+  forgeModal.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-forge-choice]');
     if (!btn) return;
     sfx.unlock();
-    engine.castSkill(btn.dataset.skill as SkillId);
+    const equip = btn.dataset.forgeChoice === 'equip';
+    engine.resolveForgedItem(equip);
+    renderForgeModal();
+    renderTab();
   });
 
-  // Awakening choice click
-  cardChoiceList.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-card-id]');
-    if (!btn) return;
-    const cardId = btn.dataset.cardId!;
-    if (engine.chooseAwakeningCard(cardId)) {
-      renderModalIfNeeded();
-      renderActiveTab();
-    }
-  });
+  function updateStanceButtons(): void {
+    root.querySelectorAll<HTMLButtonElement>('[data-stance]').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.stance === engine.state.stance);
+    });
+  }
 
   function updateQuickButtons(): void {
-    qAuto.classList.toggle('on', engine.state.autoSkill);
-    qAuto.textContent = engine.state.autoSkill ? '자동 ON' : '자동 OFF';
+    qAuto.classList.toggle('on', engine.state.autoRally);
+    qAuto.textContent = engine.state.autoRally ? '자동나팔 ON' : '자동나팔';
     qSpeed.classList.toggle('on', engine.state.speedMult === 2);
     qSpeed.textContent = `${engine.state.speedMult}배속`;
     qSound.classList.toggle('on', engine.state.soundEnabled);
     qSound.textContent = engine.state.soundEnabled ? '소리 ON' : '음소거';
   }
 
-  function renderModalIfNeeded(): void {
-    const choices = engine.state.activeCardChoices;
-    const sig = choices ? choices.map((c) => c.id).join(',') : '';
-    if (sig === lastModalSignature) return;
-    lastModalSignature = sig;
+  function renderForgeModal(): void {
+    const item = engine.state.pendingForgeItem;
+    const sig = item ? item.id : '';
+    if (sig === lastForgeSig) return;
+    lastForgeSig = sig;
 
-    if (!choices) {
-      awakeningModal.classList.add('hidden');
+    if (!item) {
+      forgeModal.classList.add('hidden');
       return;
     }
 
-    awakeningModal.classList.remove('hidden');
-    cardChoiceList.innerHTML = choices
-      .map((card) => {
-        const curStack = engine.state.cards[card.id] ?? 0;
-        return `
-        <button class="awake-choice rarity-${card.rarity}" data-card-id="${card.id}">
-          <div class="awake-head">
-            <span class="awake-icon">${card.icon}</span>
-            <div class="awake-title-wrap">
-              <div class="awake-name">${card.name}</div>
-              <div class="awake-meta">
-                <span class="rarity-tag ${card.rarity}">${RARITY_LABELS[card.rarity]}</span>
-                <span class="tag-chip">${card.tag}</span>
-                <span>Lv.${curStack} → ${curStack + 1}</span>
-              </div>
-            </div>
+    const cur = engine.state.equipment[item.slot];
+    const slotInfo = SLOT_META[item.slot];
+    const newRarity = RARITY_CONFIG[item.rarity];
+    const curRarity = RARITY_CONFIG[cur.rarity];
+    const diff = item.power - cur.power;
+    const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+
+    forgeModal.classList.remove('hidden');
+    forgeModalContent.innerHTML = `
+      <div class="modal-kicker">LIVE ANVIL FORGING</div>
+      <h3>${slotInfo.icon} 새로운 ${slotInfo.label} 단조 완료!</h3>
+      <div class="compare-grid">
+        <div class="item-box">
+          <div class="item-tag">현재 장착</div>
+          <div class="item-name" style="color:${curRarity.color}">[${curRarity.label}] ${cur.name}</div>
+          <div class="item-stat">${slotInfo.statLabel} <strong>${cur.power}</strong></div>
+          <div class="item-bonus">${cur.bonusLabel}</div>
+        </div>
+        <div class="item-box highlight" style="border-color:${newRarity.color}">
+          <div class="item-tag" style="color:${newRarity.color}">신규 단조 (Lv.${item.level})</div>
+          <div class="item-name" style="color:${newRarity.color}">[${newRarity.label}] ${item.name}</div>
+          <div class="item-stat">
+            ${slotInfo.statLabel} <strong>${item.power}</strong>
+            <span class="diff-pill ${diff >= 0 ? 'up' : 'down'}">${diffStr}</span>
           </div>
-          <p class="awake-desc">${card.desc}</p>
-        </button>
-      `;
-      })
-      .join('');
+          <div class="item-bonus">${item.bonusLabel}</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-amber btn-sm" data-forge-choice="equip">⚔️ 장착하기 (구장비 판매)</button>
+        <button class="btn btn-ghost btn-sm" data-forge-choice="salvage">♻️ 분해 (골드·광석·숙련도)</button>
+      </div>
+    `;
   }
 
-  function renderActiveTab(): void {
+  function renderTab(): void {
     const s = engine.state;
     const stats = engine.computeStats();
 
-    if (activeTab === 'upgrade') {
+    if (activeTab === 'forge') {
+      const oreCost = engine.getForgeCost();
+      const canForge = s.ore >= oreCost && !s.pendingForgeItem;
+      const slots: EquipSlot[] = ['weapon', 'shield', 'armor'];
+
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
-            <h4>전투 능력 강화</h4>
-            <p>골드로 기본 스탯을 즉시 끌어올리세요</p>
+            <h4>야전 대장간 · 숙련 Lv.${stats.forgeLevel}</h4>
+            <p>광석으로 장비를 단조할수록 희귀·신화 확률이 올라갑니다</p>
           </div>
-          <div class="buy-mode-group">
-            ${([1, 10, 'MAX'] as BuyMode[])
-              .map(
-                (m) => `
-              <button class="mode-btn ${s.buyMode === m ? 'active' : ''}" data-action="buy-mode" data-mode="${m}">
-                ${m === 'MAX' ? 'MAX' : `x${m}`}
-              </button>
-            `
-              )
-              .join('')}
-          </div>
+          <span class="ore-badge">⛏️ ${fmtNum(s.ore)}</span>
         </div>
-        <div class="upgrade-list">
-          ${UPGRADES.map((u) => {
-            const lv = s.upgrades[u.key];
-            const batch = engine.getUpgradeBatchInfo(u.key, s.buyMode);
-            return `
-              <div class="upgrade-row">
-                <div class="upgrade-left">
-                  <span class="upgrade-icon">${u.icon}</span>
-                  <div>
-                    <div class="upgrade-title">${u.name} <span class="lv-tag">Lv.${lv}</span></div>
-                    <div class="upgrade-desc">${u.shortDesc}</div>
+
+        <button class="anvil-cta ${canForge ? 'ready' : ''}" data-action="forge-now" ${canForge ? '' : 'disabled'}>
+          <span class="anvil-emoji">🔨</span>
+          <div class="anvil-copy">
+            <strong>장비 즉시 단조하기</strong>
+            <small>소모 광석 ⛏️ ${oreCost} · 무작위 무기/방패/갑옷 제작</small>
+          </div>
+        </button>
+
+        <div class="equip-grid">
+          ${slots
+            .map((slot) => {
+              const item = s.equipment[slot];
+              const meta = SLOT_META[slot];
+              const rar = RARITY_CONFIG[item.rarity];
+              return `
+                <div class="equip-card" style="border-left: 3px solid ${rar.color}">
+                  <div class="equip-top">
+                    <span>${meta.icon} ${meta.label}</span>
+                    <span class="rar-chip" style="color:${rar.color}">${rar.label} · Lv.${item.level}</span>
+                  </div>
+                  <div class="equip-name">${item.name}</div>
+                  <div class="equip-stats">
+                    <span>${meta.statLabel} <strong>+${item.power}</strong></span>
+                    <span class="equip-bonus">${item.bonusLabel}</span>
                   </div>
                 </div>
-                <button
-                  class="buy-btn ${batch.canAfford ? 'can-buy' : ''}"
-                  data-action="buy-upgrade"
-                  data-key="${u.key}"
-                  ${batch.canAfford ? '' : 'disabled'}
-                >
-                  <span class="buy-cost">🪙 ${fmtNum(batch.totalCost)}</span>
-                  <span class="buy-qty">+${batch.count}</span>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+    } else if (activeTab === 'squad') {
+      panelBody.innerHTML = `
+        <div class="panel-header">
+          <div>
+            <h4>원정대 동료 &amp; 기사 훈련</h4>
+            <p>동료를 영입하면 전장에 직접 합류해 함께 싸웁니다</p>
+          </div>
+        </div>
+
+        <div class="sub-label">원정대 용병 (전장 직접 참전)</div>
+        <div class="row-list">
+          ${COMPANIONS.map((c) => {
+            const lv = s.companions[c.id];
+            const cost = getCompanionCost(c, lv);
+            const canBuy = s.gold >= cost;
+            return `
+              <div class="item-row">
+                <div class="row-left">
+                  <span class="row-icon" style="border-color:${c.color}">${c.icon}</span>
+                  <div>
+                    <div class="row-title">${c.name} <span class="lv-tag">${lv === 0 ? '미영입' : `Lv.${lv}`}</span></div>
+                    <div class="row-desc">${c.role} · ${c.desc}</div>
+                  </div>
+                </div>
+                <button class="buy-btn ${canBuy ? 'can-buy' : ''}" data-action="buy-companion" data-key="${c.id}" ${canBuy ? '' : 'disabled'}>
+                  <span>${lv === 0 ? '영입' : '강화'}</span>
+                  <small>🪙 ${fmtNum(cost)}</small>
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div class="sub-label">기사단 기초 훈련</div>
+        <div class="row-list">
+          ${TRAININGS.map((t) => {
+            const lv = s.training[t.key];
+            const cost = getTrainingCost(t, lv);
+            const canBuy = s.gold >= cost;
+            return `
+              <div class="item-row">
+                <div class="row-left">
+                  <span class="row-icon">${t.icon}</span>
+                  <div>
+                    <div class="row-title">${t.name} <span class="lv-tag">Lv.${lv}</span></div>
+                    <div class="row-desc">${t.desc}</div>
+                  </div>
+                </div>
+                <button class="buy-btn ${canBuy ? 'can-buy' : ''}" data-action="buy-training" data-key="${t.key}" ${canBuy ? '' : 'disabled'}>
+                  <span>훈련</span>
+                  <small>🪙 ${fmtNum(cost)}</small>
                 </button>
               </div>
             `;
           }).join('')}
         </div>
       `;
-    } else if (activeTab === 'build') {
-      const owned = AWAKENING_CARDS.filter((c) => (s.cards[c.id] ?? 0) > 0);
+    } else if (activeTab === 'kingdom') {
+      const canReturn = engine.canReturnToKingdom();
+      const reward = engine.getReturnMedalReward();
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
-            <h4>각성 빌드 &amp; 기사 진화</h4>
-            <p>보스 처치와 3레벨마다 새로운 각성 카드를 획득합니다</p>
+            <h4>왕국 본부 &amp; 영구 시설</h4>
+            <p>원정 귀환으로 획득한 훈장으로 영구 보너스를 해금합니다</p>
           </div>
-          <span class="count-badge">${owned.length} / ${AWAKENING_CARDS.length}</span>
+          <span class="medal-badge">🏅 ${fmtNum(s.medals)}</span>
         </div>
 
-        <div class="evo-strip">
-          ${KNIGHT_TIERS.map(
-            (t, idx) => `
-            <div class="evo-node ${idx <= stats.tierIndex ? 'unlocked' : ''}">
-              <span class="evo-dot" style="background:${t.capeColor}"></span>
-              <span>${t.name}</span>
-              <small>STG ${t.minStage}</small>
-            </div>
-          `
-          ).join('')}
-        </div>
-
-        ${
-          owned.length === 0
-            ? `<div class="empty-state">아직 획득한 각성 카드가 없습니다.<br/>LV.3 달성 또는 스테이지 보스 격파 시 첫 각성이 열립니다!</div>`
-            : `<div class="owned-card-grid">
-                ${owned
-                  .map((c) => {
-                    const lv = s.cards[c.id] ?? 0;
-                    return `
-                    <div class="owned-card rarity-${c.rarity}">
-                      <div class="owned-top">
-                        <span>${c.icon} ${c.name}</span>
-                        <strong>Lv.${lv}/${c.maxStack}</strong>
-                      </div>
-                      <p>${c.desc}</p>
-                    </div>
-                  `;
-                  })
-                  .join('')}
-              </div>`
-        }
-      `;
-    } else if (activeTab === 'sanctuary') {
-      const rebirthReward = engine.getRebirthSoulReward();
-      const canRebirth = engine.canRebirth();
-      panelBody.innerHTML = `
-        <div class="panel-header">
+        <div class="return-card">
           <div>
-            <h4>흑월의 성소 (영구 강화)</h4>
-            <p>영혼(Soul) 유물은 환생 후에도 영원히 유지됩니다</p>
-          </div>
-          <span class="soul-pill">🔮 ${fmtNum(s.soul)}</span>
-        </div>
-
-        <div class="rebirth-box">
-          <div>
-            <div class="rebirth-title">🌀 성소 환생 (Rebirth)</div>
-            <div class="rebirth-desc">
+            <div class="return-title">🏰 원정 귀환 (훈장 정산)</div>
+            <div class="return-desc">
               ${
-                canRebirth
-                  ? `지금 환생하면 <strong>영혼 +${rebirthReward}</strong> 획득 (누적 ${s.rebirthCount}회)`
-                  : `STAGE 3 도달 시 환생 가능 (현재 STG ${s.stage})`
+                canReturn
+                  ? `지금 귀환하면 <strong>훈장 +${reward}</strong> 획득 (누적 ${s.expeditionReturns}회)`
+                  : `STAGE 4 돌파 시 귀환 가능 (현재 STAGE ${s.stage})`
               }
             </div>
           </div>
-          <button
-            class="btn btn-sm ${canRebirth ? 'btn-gold' : 'btn-muted'}"
-            data-action="rebirth"
-            ${canRebirth ? '' : 'disabled'}
-          >
-            환생하기
+          <button class="btn btn-sm ${canReturn ? 'btn-amber' : 'btn-muted'}" data-action="kingdom-return" ${canReturn ? '' : 'disabled'}>
+            귀환하기
           </button>
         </div>
 
-        <div class="upgrade-list">
-          ${RELICS.map((r) => {
-            const lv = s.relics[r.key];
-            const isMax = lv >= r.maxLevel;
-            const cost = getRelicCost(r, lv);
-            const canBuy = !isMax && s.soul >= cost;
+        <div class="row-list">
+          ${FACILITIES.map((f) => {
+            const lv = s.facilities[f.key];
+            const isMax = lv >= f.maxLevel;
+            const cost = getFacilityCost(f, lv);
+            const canBuy = !isMax && s.medals >= cost;
             return `
-              <div class="upgrade-row">
-                <div class="upgrade-left">
-                  <span class="upgrade-icon">${r.icon}</span>
+              <div class="item-row">
+                <div class="row-left">
+                  <span class="row-icon">${f.icon}</span>
                   <div>
-                    <div class="upgrade-title">${r.name} <span class="lv-tag">Lv.${lv}/${r.maxLevel}</span></div>
-                    <div class="upgrade-desc">${r.desc}</div>
+                    <div class="row-title">${f.name} <span class="lv-tag">Lv.${lv}/${f.maxLevel}</span></div>
+                    <div class="row-desc">${f.desc}</div>
                   </div>
                 </div>
-                <button
-                  class="buy-btn soul-buy ${canBuy ? 'can-buy' : ''}"
-                  data-action="buy-relic"
-                  data-key="${r.key}"
-                  ${canBuy ? '' : 'disabled'}
-                >
-                  <span class="buy-cost">${isMax ? 'MAX' : `🔮 ${cost}`}</span>
+                <button class="buy-btn medal-buy ${canBuy ? 'can-buy' : ''}" data-action="buy-facility" data-key="${f.key}" ${canBuy ? '' : 'disabled'}>
+                  <span>${isMax ? 'MAX' : '증축'}</span>
+                  <small>${isMax ? '' : `🏅 ${cost}`}</small>
                 </button>
               </div>
             `;
@@ -476,25 +468,25 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
-            <h4>기사 전투 정보</h4>
-            <p>현재 빌드 능력치 및 누적 기록</p>
+            <h4>원정 일지 &amp; 전투 기록</h4>
+            <p>현재 원정대 전력과 누적 업적</p>
           </div>
-          <span class="count-badge">최고 STG ${s.highestStage}</span>
+          <span class="ore-badge">최고 STG ${s.highestStage}</span>
         </div>
 
         <div class="stat-grid">
-          <div class="stat-cell"><span>공격력</span><strong>${fmtNum(stats.atk)}</strong></div>
+          <div class="stat-cell"><span>기사 공격력</span><strong>${fmtNum(stats.atk)}</strong></div>
           <div class="stat-cell"><span>공격속도</span><strong>${stats.aps.toFixed(2)}/s</strong></div>
           <div class="stat-cell"><span>치명타 확률</span><strong>${(stats.critChance * 100).toFixed(1)}%</strong></div>
-          <div class="stat-cell"><span>치명타 배율</span><strong>${(stats.critMult * 100).toFixed(0)}%</strong></div>
+          <div class="stat-cell"><span>방어력</span><strong>${fmtNum(stats.def)}</strong></div>
           <div class="stat-cell"><span>최대 체력</span><strong>${fmtNum(stats.maxHp)}</strong></div>
-          <div class="stat-cell"><span>초당 재생</span><strong>${stats.regenPerSec.toFixed(1)}/s</strong></div>
-          <div class="stat-cell"><span>일섬 반격 배율</span><strong>${(stats.counterMult * 100).toFixed(0)}%</strong></div>
-          <div class="stat-cell"><span>골드 획득 배율</span><strong>${(stats.goldMult * 100).toFixed(0)}%</strong></div>
+          <div class="stat-cell"><span>초당 회복</span><strong>${stats.regenPerSec.toFixed(1)}/s</strong></div>
+          <div class="stat-cell"><span>골드 배율</span><strong>${(stats.goldMult * 100).toFixed(0)}%</strong></div>
+          <div class="stat-cell"><span>광석 배율</span><strong>${(stats.oreMult * 100).toFixed(0)}%</strong></div>
           <div class="stat-cell"><span>누적 처치</span><strong>${fmtNum(s.totalKills)}</strong></div>
-          <div class="stat-cell"><span>일섬 반격 성공</span><strong>${fmtNum(s.totalCounters)}</strong></div>
-          <div class="stat-cell"><span>누적 환생</span><strong>${s.rebirthCount}회</strong></div>
-          <div class="stat-cell"><span>플레이 시간</span><strong>${fmtTime(s.totalPlaySeconds)}</strong></div>
+          <div class="stat-cell"><span>누적 단조</span><strong>${fmtNum(s.totalForges)}회</strong></div>
+          <div class="stat-cell"><span>왕국 귀환</span><strong>${s.expeditionReturns}회</strong></div>
+          <div class="stat-cell"><span>원정 시간</span><strong>${fmtTime(s.totalPlaySeconds)}</strong></div>
         </div>
 
         <div class="danger-zone">
@@ -507,76 +499,73 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   function updateHud(): void {
     const s = engine.state;
     const stats = engine.computeStats();
-    const biome = getBiomeForStage(s.stage);
+    const zone = getZoneForStage(s.stage);
 
-    root.querySelector('#hud-stage')!.textContent = `STG ${s.stage}-${s.wave}`;
-    root.querySelector('#hud-biome')!.textContent = biome.name;
+    root.querySelector('#hud-stage')!.textContent = `STAGE ${s.stage}-${s.wave}`;
+    root.querySelector('#hud-zone')!.textContent = zone.name;
     root.querySelector('#hud-gold')!.textContent = `🪙 ${fmtNum(s.gold)}`;
-    root.querySelector('#hud-soul')!.textContent = `🔮 ${fmtNum(s.soul)}`;
+    root.querySelector('#hud-ore')!.textContent = `⛏️ ${fmtNum(s.ore)}`;
     root.querySelector('#hud-dps')!.textContent = `DPS ${fmtNum(stats.dps)}`;
-    root.querySelector('#hud-tier')!.textContent = stats.tierName;
-
-    const expPct = Math.min(100, Math.floor((s.exp / s.expToNext) * 100));
-    root.querySelector('#hud-lv')!.textContent = `LV.${s.level} · EXP ${expPct}%`;
+    root.querySelector('#hud-rank')!.textContent = stats.rankTitle;
+    root.querySelector('#hud-medals')!.textContent = `🏅 훈장 ${fmtNum(s.medals)} · 대장간 Lv.${stats.forgeLevel}`;
 
     const hpPct = Math.max(0, Math.min(100, (s.heroHp / s.heroMaxHp) * 100));
-    const shieldPct = Math.max(0, Math.min(100, (s.heroShield / s.heroMaxHp) * 100));
+    const shPct = Math.max(0, Math.min(100, (s.heroShield / s.heroMaxHp) * 100));
     (root.querySelector('#hud-hp-fill') as HTMLElement).style.width = `${hpPct}%`;
-    (root.querySelector('#hud-shield-fill') as HTMLElement).style.width = `${shieldPct}%`;
-    (root.querySelector('#hud-exp-fill') as HTMLElement).style.width = `${expPct}%`;
+    (root.querySelector('#hud-shield-fill') as HTMLElement).style.width = `${shPct}%`;
+    (root.querySelector('#hud-morale-fill') as HTMLElement).style.width = `${Math.min(100, s.morale)}%`;
     root.querySelector('#hud-hp-text')!.textContent = `HP ${fmtNum(s.heroHp)} / ${fmtNum(s.heroMaxHp)}${
       s.heroShield > 0 ? ` (+${fmtNum(s.heroShield)})` : ''
     }`;
 
-    // Wave pips
-    const pipsEl = root.querySelector('#hud-wave-pips')!;
-    let pipsHtml = '';
+    let pips = '';
     for (let w = 1; w <= 5; w++) {
       const cls = w < s.wave ? 'done' : w === s.wave ? 'current' : '';
-      const bossCls = w === 5 ? 'boss' : '';
-      pipsHtml += `<span class="wave-pip ${cls} ${bossCls}">${w === 5 ? '☠' : ''}</span>`;
+      pips += `<span class="wave-pip ${cls} ${w === 5 ? 'boss' : ''}">${w === 5 ? '👑' : ''}</span>`;
     }
-    pipsEl.innerHTML = pipsHtml;
+    root.querySelector('#hud-wave-pips')!.innerHTML = pips;
 
-    // Counter button state
-    const counterBtn = root.querySelector<HTMLButtonElement>('#btn-counter')!;
-    const counterSub = root.querySelector('#counter-sub')!;
-    const enemyWinding = s.enemies.some((e) => e.windup > 0.12);
-    counterBtn.classList.toggle('telegraph', enemyWinding && s.counterCooldown <= 0);
-    counterBtn.disabled = s.counterCooldown > 0;
-    counterSub.textContent =
-      s.counterCooldown > 0 ? `${s.counterCooldown.toFixed(1)}s` : enemyWinding ? '지금 반격!' : 'READY';
+    const rallyBtn = root.querySelector<HTMLButtonElement>('#btn-rally')!;
+    const rallySub = root.querySelector('#rally-sub')!;
+    const ready = s.morale >= 100 && s.rallyTimer <= 0;
+    rallyBtn.classList.toggle('ready', ready);
+    rallyBtn.classList.toggle('active', s.rallyTimer > 0);
+    rallyBtn.disabled = !ready;
+    rallySub.textContent = s.rallyTimer > 0 ? `돌격 ${s.rallyTimer.toFixed(1)}s` : `${Math.floor(s.morale)}%`;
+  }
 
-    // Fever button state
-    const feverBtn = root.querySelector<HTMLButtonElement>('#btn-fever')!;
-    const feverSub = root.querySelector('#fever-sub')!;
-    const feverReady = s.feverGauge >= 100 && s.feverActiveTimer <= 0;
-    feverBtn.classList.toggle('ready', feverReady);
-    feverBtn.classList.toggle('active', s.feverActiveTimer > 0);
-    feverBtn.disabled = !feverReady;
-    feverSub.textContent =
-      s.feverActiveTimer > 0 ? `폭주 ${s.feverActiveTimer.toFixed(1)}s` : `${Math.floor(s.feverGauge)}%`;
-
-    // Pending awakening pill
-    const awakeBtn = root.querySelector('#btn-open-awakening')!;
-    awakeBtn.classList.toggle('hidden', s.pendingAwakenings <= 0 || Boolean(s.activeCardChoices));
-    root.querySelector('#awake-count')!.textContent = String(s.pendingAwakenings);
-
-    // Skills cooldowns
-    for (const sk of SKILLS) {
-      const btn = skillBar.querySelector<HTMLButtonElement>(`[data-skill="${sk.id}"]`)!;
-      const cdEl = root.querySelector(`#cd-${sk.id}`)!;
-      const locked = s.stage < sk.unlockStage;
-      const cd = s.skillCooldowns[sk.id];
-      btn.classList.toggle('locked', locked);
-      btn.classList.toggle('cooling', cd > 0);
-      btn.disabled = locked || cd > 0;
-      cdEl.textContent = locked ? `STG ${sk.unlockStage}` : cd > 0 ? `${cd.toFixed(1)}s` : '';
+  function refreshButtonsLightweight(): void {
+    const s = engine.state;
+    if (activeTab === 'forge') {
+      const btn = panelBody.querySelector<HTMLButtonElement>('[data-action="forge-now"]');
+      const oreBadge = panelBody.querySelector('.ore-badge');
+      if (oreBadge) oreBadge.textContent = `⛏️ ${fmtNum(s.ore)}`;
+      if (btn) {
+        const can = s.ore >= engine.getForgeCost() && !s.pendingForgeItem;
+        btn.disabled = !can;
+        btn.classList.toggle('ready', can);
+      }
+    } else if (activeTab === 'squad') {
+      panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-companion"]').forEach((btn) => {
+        const id = btn.dataset.key as CompanionId;
+        const def = COMPANIONS.find((c) => c.id === id)!;
+        const can = s.gold >= getCompanionCost(def, s.companions[id]);
+        btn.disabled = !can;
+        btn.classList.toggle('can-buy', can);
+      });
+      panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-training"]').forEach((btn) => {
+        const key = btn.dataset.key as TrainingKey;
+        const def = TRAININGS.find((t) => t.key === key)!;
+        const can = s.gold >= getTrainingCost(def, s.training[key]);
+        btn.disabled = !can;
+        btn.classList.toggle('can-buy', can);
+      });
     }
   }
 
+  updateStanceButtons();
   updateQuickButtons();
-  renderActiveTab();
+  renderTab();
   updateHud();
 
   let rafId = 0;
@@ -587,72 +576,35 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     lastFrame = now;
 
     engine.step(dt);
-
-    // Drain sound events
-    const events = engine.drainEvents();
-    for (const ev of events) {
+    for (const ev of engine.drainEvents()) {
       sfx.play(ev.type);
     }
 
     renderArena(ctx, engine.state, now / 1000);
 
-    // Throttle DOM HUD & tab refresh to ~8Hz for smooth performance
-    if (now - lastUiUpdate >= 120) {
-      lastUiUpdate = now;
+    if (now - lastUiSync >= 120) {
+      lastUiSync = now;
       updateHud();
-      renderModalIfNeeded();
-      if (activeTab === 'upgrade' || activeTab === 'sanctuary') {
-        // Lightweight affordability update without losing scroll position
-        refreshAffordability();
-      }
+      renderForgeModal();
+      refreshButtonsLightweight();
     }
 
-    // Auto-save every 8 seconds
-    if (now - lastSaveTime >= 8000) {
-      lastSaveTime = now;
+    if (now - lastSave >= 8000) {
+      lastSave = now;
       writeSaveData(engine.toSaveData());
     }
 
     rafId = requestAnimationFrame(loop);
   };
 
-  function refreshAffordability(): void {
-    const s = engine.state;
-    if (activeTab === 'upgrade') {
-      panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-upgrade"]').forEach((btn) => {
-        const key = btn.dataset.key as UpgradeKey;
-        const batch = engine.getUpgradeBatchInfo(key, s.buyMode);
-        btn.disabled = !batch.canAfford;
-        btn.classList.toggle('can-buy', batch.canAfford);
-        const costEl = btn.querySelector('.buy-cost');
-        const qtyEl = btn.querySelector('.buy-qty');
-        if (costEl) costEl.textContent = `🪙 ${fmtNum(batch.totalCost)}`;
-        if (qtyEl) qtyEl.textContent = `+${batch.count}`;
-      });
-    } else if (activeTab === 'sanctuary') {
-      panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-relic"]').forEach((btn) => {
-        const key = btn.dataset.key as RelicKey;
-        const def = RELICS.find((r) => r.key === key)!;
-        const lv = s.relics[key];
-        const isMax = lv >= def.maxLevel;
-        const cost = getRelicCost(def, lv);
-        const canBuy = !isMax && s.soul >= cost;
-        btn.disabled = !canBuy;
-        btn.classList.toggle('can-buy', canBuy);
-      });
-    }
-  }
-
-  const handleBeforeUnload = () => {
-    writeSaveData(engine.toSaveData());
-  };
-  window.addEventListener('beforeunload', handleBeforeUnload);
+  const onUnload = () => writeSaveData(engine.toSaveData());
+  window.addEventListener('beforeunload', onUnload);
 
   rafId = requestAnimationFrame(loop);
 
   return () => {
     cancelAnimationFrame(rafId);
-    window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.removeEventListener('beforeunload', onUnload);
     writeSaveData(engine.toSaveData());
   };
 }
