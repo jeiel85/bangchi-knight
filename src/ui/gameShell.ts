@@ -22,7 +22,14 @@ import {
   loadSaveData,
   writeSaveData,
 } from '../engine/storage';
-import type { CompanionId, EquipSlot, FacilityKey, StanceId, TrainingKey } from '../engine/types';
+import type {
+  CompanionId,
+  EquipSlot,
+  FacilityKey,
+  ItemRarity,
+  StanceId,
+  TrainingKey,
+} from '../engine/types';
 import { renderArena } from '../renderer/canvasRenderer';
 
 type TabKey = 'forge' | 'squad' | 'kingdom' | 'journal';
@@ -39,11 +46,51 @@ const ICON_INDEX: Record<IconKey, number> = {
   rally: 7,
 };
 
+type TacticsIconKey =
+  | 'vanguard'
+  | 'bulwark'
+  | 'plunder'
+  | 'royalForge'
+  | 'warAcademy'
+  | 'supplyWagon'
+  | 'guildHall';
+
+const TACTICS_INDEX: Record<TacticsIconKey, number> = {
+  vanguard: 0,
+  bulwark: 1,
+  plunder: 2,
+  royalForge: 3,
+  warAcademy: 4,
+  supplyWagon: 5,
+  guildHall: 6,
+};
+
+const SLOT_ROW: Record<EquipSlot, number> = {
+  weapon: 0,
+  shield: 1,
+  armor: 2,
+};
+
 function pxIcon(key: IconKey, size = 18): string {
   const idx = ICON_INDEX[key];
   const bgW = size * 8;
   const posX = -idx * size;
   return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/icons.png');background-size:${bgW}px ${size}px;background-position:${posX}px 0;" aria-hidden="true"></span>`;
+}
+
+function tacticsIcon(key: TacticsIconKey, size = 20): string {
+  const idx = TACTICS_INDEX[key];
+  const bgW = size * 7;
+  const posX = -idx * size;
+  return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/tactics-sheet.png');background-size:${bgW}px ${size}px;background-position:${posX}px 0;" aria-hidden="true"></span>`;
+}
+
+function equipTierIcon(slot: EquipSlot, rarity: ItemRarity, size = 34): string {
+  const col = RARITY_CONFIG[rarity].rank;
+  const row = SLOT_ROW[slot];
+  const bgW = size * 5;
+  const bgH = size * 3;
+  return `<span class="px-icon" style="width:${size}px;height:${size}px;background-image:url('./assets/ui/equipment-sheet.png');background-size:${bgW}px ${bgH}px;background-position:${-col * size}px ${-row * size}px;" aria-hidden="true"></span>`;
 }
 
 function companionThumb(id: CompanionId): string {
@@ -141,7 +188,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             ${STANCES.map(
               (st) => `
               <button class="stance-btn" data-stance="${st.id}" title="${st.shortDesc}">
-                <span class="stance-top">${st.icon} ${st.name}</span>
+                <span class="stance-top inline-flex">${tacticsIcon(st.id, 17)} ${st.name}</span>
                 <span class="stance-desc">${st.shortDesc}</span>
               </button>
             `
@@ -416,7 +463,10 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     offlineModal.classList.remove('hidden');
     offlineModalContent.innerHTML = `
       <div class="modal-kicker">OFFLINE EXPEDITION LOOT</div>
-      <h3>📦 방치 원정 전리품 도착!</h3>
+      <div class="modal-art-wrap">
+        <img class="modal-chest-art" src="./assets/ui/loot-chest.png" alt="전리품 보물상자" width="64" height="64" />
+      </div>
+      <h3>방치 원정 전리품 도착!</h3>
       <p class="confirm-desc">자리를 비운 <strong>${fmtTime(rep.elapsedSeconds)}</strong> 동안 원정대가 몬스터 <strong>${fmtNum(rep.kills)}마리</strong>를 토벌했습니다.</p>
       <div class="offline-loot-row">
         <div class="loot-chip">${pxIcon('gold', 20)} <strong>+${fmtNum(rep.gold)}</strong></div>
@@ -482,10 +532,11 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     forgeModal.classList.remove('hidden');
     forgeModalContent.innerHTML = `
       <div class="modal-kicker">LIVE ANVIL FORGING</div>
-      <h3 class="inline-flex center">${pxIcon(item.slot, 22)} 새로운 ${slotInfo.label} 단조 완료!</h3>
+      <h3 class="inline-flex center">${equipTierIcon(item.slot, item.rarity, 26)} 새로운 ${slotInfo.label} 단조 완료!</h3>
       <div class="compare-grid">
         <div class="item-box">
           <div class="item-tag">현재 장착</div>
+          <div class="compare-icon-row">${equipTierIcon(cur.slot, cur.rarity, 34)}</div>
           <div class="item-name" style="color:${curRarity.color}">[${curRarity.label}] ${cur.name}</div>
           <div class="item-stat">${slotInfo.statLabel} <strong>${cur.power}</strong></div>
           <div class="item-bonus">${cur.bonusLabel}</div>
@@ -493,6 +544,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         </div>
         <div class="item-box highlight" style="border-color:${newRarity.color}">
           <div class="item-tag" style="color:${newRarity.color}">신규 단조 (Lv.${item.level})</div>
+          <div class="compare-icon-row">${equipTierIcon(item.slot, item.rarity, 34)}</div>
           <div class="item-name" style="color:${newRarity.color}">[${newRarity.label}] ${item.name}</div>
           <div class="item-stat">
             ${slotInfo.statLabel} <strong>${item.power}</strong>
@@ -530,7 +582,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         </div>
 
         <button class="anvil-cta ${canForge ? 'ready' : ''}" data-action="forge-now" ${canForge ? '' : 'disabled'}>
-          <span class="anvil-icon-box">${pxIcon('forge', 30)}</span>
+          <span class="anvil-scene ${canForge ? 'hammering' : ''}" style="background-image:url('./assets/ui/forge-anvil.png');" aria-hidden="true"></span>
           <div class="anvil-copy">
             <strong>장비 즉시 단조하기</strong>
             <small class="inline-flex">소모 광석 ${pxIcon('ore', 13)} ${oreCost} · 보유 ${fmtNum(s.ore)}</small>
@@ -551,9 +603,10 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
               return `
                 <div class="equip-card" style="border-left: 3px solid ${rar.color}">
                   <div class="equip-row-flex">
+                    <span class="equip-slot-art" style="border-color:${rar.color}">${equipTierIcon(slot, item.rarity, 34)}</span>
                     <div class="equip-info">
                       <div class="equip-top">
-                        <span class="inline-flex">${pxIcon(slot, 16)} ${meta.label} ${refLv > 0 ? `<em class="refine-tag">+${refLv}</em>` : ''}</span>
+                        <span>${meta.label} ${refLv > 0 ? `<em class="refine-tag">+${refLv}</em>` : ''}</span>
                         <span class="rar-chip" style="color:${rar.color}">${rar.label} · Lv.${item.level}</span>
                       </div>
                       <div class="equip-name">${item.name}</div>
@@ -645,12 +698,6 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     } else if (activeTab === 'kingdom') {
       const canReturn = engine.canReturnToKingdom();
       const reward = engine.getReturnMedalReward();
-      const facIcons: Record<FacilityKey, IconKey> = {
-        royalForge: 'forge',
-        warAcademy: 'weapon',
-        supplyWagon: 'gold',
-        guildHall: 'rally',
-      };
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
@@ -685,7 +732,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             return `
               <div class="item-row">
                 <div class="row-left">
-                  <span class="row-icon">${pxIcon(facIcons[f.key], 22)}</span>
+                  <span class="row-icon">${tacticsIcon(f.key, 26)}</span>
                   <div>
                     <div class="row-title">${f.name} <span class="lv-tag">Lv.${lv}/${f.maxLevel}</span></div>
                     <div class="row-desc">${f.desc}</div>

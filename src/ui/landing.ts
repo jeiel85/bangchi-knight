@@ -30,6 +30,7 @@ export function mountLanding(root: HTMLElement, onPlay: () => void): () => void 
         <section class="hero-section">
           <div class="hero-inner">
             <div class="hero-copy">
+              <img class="landing-emblem" src="./assets/ui/title-emblem.png" alt="방치 나이트 원정대 문장" width="240" height="80" />
               <div class="eyebrow">16-BIT PIXEL EXPEDITION IDLE RPG · WEB-FIRST</div>
               <h1 class="hero-title">
                 대장간을 두드리고,<br />
@@ -95,25 +96,54 @@ export function mountLanding(root: HTMLElement, onPlay: () => void): () => void 
             </div>
             <div class="card-grid four">
               <article class="feature-card">
-                <div class="feature-icon">🔥</div>
+                <div class="feature-pixel-icon" style="background-image:url('./assets/ui/tactics-sheet.png');background-size:280px 40px;background-position:0 0;"></div>
                 <h3>전술 진형 &amp; 철벽 퍼펙트 가드</h3>
                 <p>돌격·철벽·약탈 진형을 자유롭게 전환하고, 보스 강타 예고 순간 철벽 전환으로 완벽 방어 &amp; 기절 반격을 노립니다.</p>
               </article>
               <article class="feature-card">
-                <div class="feature-icon">🔨</div>
+                <div class="feature-pixel-icon anvil-mini" style="background-image:url('./assets/ui/forge-anvil.png');"></div>
                 <h3>자동 단조 · 제련 · 신화 특성</h3>
                 <p>광석으로 장비를 단조하고 자동 분해, 골드 +제련 강화, 영웅/신화 고유 특성(연쇄 일격·흡혈·거신 분쇄)까지 파밍합니다.</p>
               </article>
               <article class="feature-card">
-                <div class="feature-icon">👥</div>
+                <div class="feature-pixel-icon" style="background-image:url('./assets/ui/tactics-sheet.png');background-size:280px 40px;background-position:-160px 0;"></div>
                 <h3>원정대 동료 &amp; 몬스터 도감</h3>
                 <p>궁수·마법사·성기사가 전장에 직접 참전하며, 마주친 몬스터와 보스가 도감에 기록될 때마다 영구 공격력이 누적됩니다.</p>
               </article>
               <article class="feature-card">
-                <div class="feature-icon">📦</div>
+                <img class="feature-chest-img" src="./assets/ui/loot-chest.png" alt="오프라인 전리품 보물상자" width="44" height="44" />
                 <h3>연속 퀘스트 · 오프라인 전리품</h3>
                 <p>가이드 퀘스트, 보스 재도전/반복 파밍 전환, 최대 12시간 오프라인 방치 전리품, 8-bit BGM, 세이브 코드 백업을 지원합니다.</p>
               </article>
+            </div>
+
+            <div class="gear-showcase-bar">
+              <div class="gear-showcase-copy">
+                <span class="section-kicker">5-TIER FORGE PROGRESSION</span>
+                <h3>일반 철검에서 신화 성검까지 — 15종 등급별 장비 도트 진화</h3>
+              </div>
+              <div class="gear-tier-strip">
+                ${[
+                  { label: '일반', color: '#cbd5e1', col: 0 },
+                  { label: '고급', color: '#4ade80', col: 1 },
+                  { label: '희귀', color: '#38bdf8', col: 2 },
+                  { label: '영웅', color: '#c084fc', col: 3 },
+                  { label: '신화', color: '#facc15', col: 4 },
+                ]
+                  .map(
+                    (r) => `
+                  <div class="gear-tier-pill" style="border-color:${r.color}">
+                    <div class="gear-trio">
+                      <span class="px-icon" style="width:28px;height:28px;background-image:url('./assets/ui/equipment-sheet.png');background-size:140px 84px;background-position:${-r.col * 28}px 0;"></span>
+                      <span class="px-icon" style="width:28px;height:28px;background-image:url('./assets/ui/equipment-sheet.png');background-size:140px 84px;background-position:${-r.col * 28}px -28px;"></span>
+                      <span class="px-icon" style="width:28px;height:28px;background-image:url('./assets/ui/equipment-sheet.png');background-size:140px 84px;background-position:${-r.col * 28}px -56px;"></span>
+                    </div>
+                    <span style="color:${r.color}">${r.label}</span>
+                  </div>
+                `
+                  )
+                  .join('')}
+              </div>
             </div>
           </div>
         </section>

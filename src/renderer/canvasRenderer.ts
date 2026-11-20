@@ -139,6 +139,26 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.stroke();
   }
 
+  // Bulwark Perfect Guard Hex Barrier Burst!
+  if (state.guardBurstTimer > 0 && assets.projectiles.complete && assets.projectiles.naturalWidth > 0) {
+    const t = 1 - state.guardBurstTimer / 0.55;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - t * 0.9);
+    const sz = Math.round(44 + t * 22);
+    ctx.drawImage(
+      assets.projectiles,
+      3 * 32,
+      0,
+      32,
+      32,
+      Math.round(HERO_X - sz / 2 + 12),
+      Math.round(GROUND_Y - 24 - sz / 2),
+      sz,
+      sz
+    );
+    ctx.restore();
+  }
+
   // 4. Enemies & Zone Bosses
   let activeBoss: EnemyEntity | null = null;
   for (const enemy of state.enemies) {
@@ -146,28 +166,48 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     drawEnemy(ctx, enemy, zoneIndex, assets);
   }
 
-  // 5. Companion Projectiles
+  // 4.5 Physical Bouncing Gold Coin & Ore Crystal Loot Drops
+  if (assets.projectiles.complete && assets.projectiles.naturalWidth > 0) {
+    for (const d of state.lootDrops) {
+      const cell = d.kind === 'coin' ? 4 : 5;
+      ctx.drawImage(
+        assets.projectiles,
+        cell * 32,
+        0,
+        32,
+        32,
+        Math.round(d.x - 10),
+        Math.round(d.y - 10),
+        20,
+        20
+      );
+    }
+  }
+
+  // 5. Companion Projectiles (Pixel Art Arrow & 2-Frame Fireball)
+  const projReady = assets.projectiles.complete && assets.projectiles.naturalWidth > 0;
   for (const p of state.projectiles) {
-    if (p.kind === 'arrow') {
-      ctx.fillStyle = '#141928';
-      ctx.fillRect(Math.round(p.x) - 9, Math.round(p.y) - 2, 18, 4);
+    if (projReady) {
+      const cell = p.kind === 'arrow' ? 0 : Math.floor(timeSec * 14) % 2 === 0 ? 1 : 2;
+      const sz = p.kind === 'arrow' ? 24 : 26;
+      ctx.drawImage(
+        assets.projectiles,
+        cell * 32,
+        0,
+        32,
+        32,
+        Math.round(p.x - sz / 2),
+        Math.round(p.y - sz / 2),
+        sz,
+        sz
+      );
+    } else if (p.kind === 'arrow') {
       ctx.fillStyle = '#fef08a';
       ctx.fillRect(Math.round(p.x) - 8, Math.round(p.y) - 1, 14, 2);
-      ctx.fillStyle = '#4ade80';
-      ctx.fillRect(Math.round(p.x) + 4, Math.round(p.y) - 2, 4, 4);
-      ctx.fillRect(Math.round(p.x) - 9, Math.round(p.y) - 2, 3, 4);
-    } else if (p.kind === 'fireball') {
-      ctx.fillStyle = '#9a3412';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-      ctx.fill();
+    } else {
       ctx.fillStyle = '#f97316';
       ctx.beginPath();
       ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.arc(p.x + 1, p.y - 1, 3, 0, Math.PI * 2);
       ctx.fill();
     }
   }

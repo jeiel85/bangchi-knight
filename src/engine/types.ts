@@ -177,6 +177,17 @@ export interface VfxInstance {
   maxLife: number;
 }
 
+export interface LootDrop {
+  id: number;
+  kind: 'coin' | 'ore';
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+}
+
 export interface Particle {
   x: number;
   y: number;
@@ -307,6 +318,7 @@ export interface GameState {
 
   morale: number; // 0..100
   rallyTimer: number;
+  guardBurstTimer: number;
   autoForgeTimer: number;
   screenShake: number;
   bannerText: string;
@@ -322,6 +334,7 @@ export interface GameState {
   enemies: EnemyEntity[];
   projectiles: Projectile[];
   vfxList: VfxInstance[];
+  lootDrops: LootDrop[];
   floatingTexts: FloatingText[];
   particles: Particle[];
 

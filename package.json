@@ -1,6 +1,6 @@
 {
   "name": "bangchi-knight",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "방치 나이트 (Bangchi Knight) — 3종 전술 진형, 실시간 대장간 장비 단조, 원정대 동료 합류를 브라우저에서 바로 즐기는 16-bit 픽셀 방치형 원정 RPG (Web-First → Native)",
   "type": "module",

@@ -129,6 +129,7 @@ export class BangchiEngine {
 
       morale: this.demoMode ? 65 : 20,
       rallyTimer: 0,
+      guardBurstTimer: 0,
       autoForgeTimer: 0,
       screenShake: 0,
       bannerText: '',
@@ -144,6 +145,7 @@ export class BangchiEngine {
       enemies: [],
       projectiles: [],
       vfxList: [],
+      lootDrops: [],
       floatingTexts: [],
       particles: [],
 
@@ -446,6 +448,7 @@ export class BangchiEngine {
       this.state.heroShield = Math.max(this.state.heroShield, Math.round(stats.maxHp * 0.35));
       this.addMorale(24);
       this.state.totalPerfectGuards += 1;
+      this.state.guardBurstTimer = 0.55;
       this.state.screenShake = 6;
       this.damageEnemy(chargingBoss, stats.atk * 2.2, true, '#38bdf8');
       this.spawnVfx(3, HERO_X, GROUND_Y - 24, 1.0, 0.5);
@@ -662,6 +665,7 @@ export class BangchiEngine {
     s.totalPlaySeconds += rawDt;
     s.animTime += dt;
     s.screenShake = Math.max(0, s.screenShake - rawDt * 22);
+    s.guardBurstTimer = Math.max(0, s.guardBurstTimer - rawDt);
     if (s.bannerTimer > 0) s.bannerTimer = Math.max(0, s.bannerTimer - rawDt);
     if (s.comboTimer > 0) {
       s.comboTimer -= rawDt;
@@ -979,6 +983,7 @@ export class BangchiEngine {
       this.spawnText(e.x - 8, GROUND_Y - 14, `+${goldGain}G`, '#facc15', 9);
       this.spawnText(e.x + 12, GROUND_Y - 26, `+${oreGain}광석`, '#93c5fd', 9);
       this.spawnBurst(e.x, GROUND_Y - 18, '#facc15', e.isBoss ? 20 : 8);
+      this.spawnLootDrops(e.x, e.isBoss ? 5 : 2);
 
       if (e.isBoss) {
         s.totalBossKills += 1;
@@ -1144,8 +1149,43 @@ export class BangchiEngine {
     });
   }
 
+  private spawnLootDrops(x: number, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const kind: 'coin' | 'ore' = i % 2 === 0 ? 'coin' : 'ore';
+      this.state.lootDrops.push({
+        id: this.nextId++,
+        kind,
+        x: x + (Math.random() - 0.5) * 16,
+        y: GROUND_Y - 16,
+        vx: (Math.random() - 0.5) * 58,
+        vy: -78 - Math.random() * 44,
+        life: 0.95 + Math.random() * 0.25,
+        maxLife: 1.2,
+      });
+    }
+  }
+
   private tickParticlesAndTexts(dt: number): void {
     const s = this.state;
+    for (let i = s.lootDrops.length - 1; i >= 0; i--) {
+      const d = s.lootDrops[i];
+      d.life -= dt;
+      if (d.life < 0.28) {
+        // Zip smoothly toward hero for pickup feel
+        d.x += (HERO_X - d.x) * Math.min(1, dt * 12);
+        d.y += (GROUND_Y - 24 - d.y) * Math.min(1, dt * 12);
+      } else {
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.vy += 260 * dt;
+        if (d.y > GROUND_Y + 2) {
+          d.y = GROUND_Y + 2;
+          d.vy = -Math.abs(d.vy) * 0.42;
+          d.vx *= 0.65;
+        }
+      }
+      if (d.life <= 0) s.lootDrops.splice(i, 1);
+    }
     for (let i = s.vfxList.length - 1; i >= 0; i--) {
       s.vfxList[i].life -= dt;
       if (s.vfxList[i].life <= 0) s.vfxList.splice(i, 1);

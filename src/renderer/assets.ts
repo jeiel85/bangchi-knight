@@ -6,6 +6,7 @@ export interface PixelAssets {
   enemies: HTMLImageElement;
   bosses: HTMLImageElement;
   vfx: HTMLImageElement;
+  projectiles: HTMLImageElement;
   bg: Record<string, HTMLImageElement>;
   whiteFlash: {
     knight: HTMLCanvasElement | null;
@@ -50,6 +51,7 @@ export function getPixelAssets(): PixelAssets {
     enemies: new Image(),
     bosses: new Image(),
     vfx: new Image(),
+    projectiles: new Image(),
     bg: {},
     whiteFlash: {
       knight: null,
@@ -60,7 +62,7 @@ export function getPixelAssets(): PixelAssets {
   };
 
   let loadedCount = 0;
-  const total = 12;
+  const total = 13;
   const markLoaded = () => {
     loadedCount += 1;
     if (loadedCount >= total) assets.ready = true;
@@ -82,6 +84,7 @@ export function getPixelAssets(): PixelAssets {
     markLoaded();
   });
   assets.vfx = loadImage('./assets/vfx/vfx-sheet.png', markLoaded);
+  assets.projectiles = loadImage('./assets/vfx/projectiles-sheet.png', markLoaded);
 
   const zoneIds = ['dawnstep', 'amber-canyon', 'mirewood', 'frostpeak', 'cinder-citadel'];
   for (const id of zoneIds) {
