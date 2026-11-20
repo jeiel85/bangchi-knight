@@ -10,6 +10,12 @@ export type CompanionId = 'ranger' | 'pyro' | 'banneret';
 
 export type FacilityKey = 'royalForge' | 'warAcademy' | 'supplyWagon' | 'guildHall';
 
+export type KnightSkillId = 'whirlwind' | 'judgment' | 'oath';
+
+export type DungeonId = 'oreMine' | 'bossArena';
+
+export type AutoForgeFilter = 'upgrade' | 'rare' | 'epic';
+
 export type EnemyKind = 'goblin' | 'boar' | 'bandit' | 'scorpion' | 'bogling' | 'golem' | 'wyvern' | 'boss';
 
 export type ItemTraitId = 'doubleStrike' | 'vampiric' | 'oreFinder' | 'bossBreaker';
@@ -47,6 +53,57 @@ export interface StanceDef {
   dmgTakenMult: number;
   lootMult: number;
   shieldRegenRatio: number;
+}
+
+export interface KnightSkillDef {
+  id: KnightSkillId;
+  name: string;
+  desc: string;
+  cooldown: number;
+  unlockStage: number;
+  baseUpgradeCost: number;
+  iconIndex: number;
+}
+
+export interface DungeonDef {
+  id: DungeonId;
+  name: string;
+  subtitle: string;
+  desc: string;
+  durationSec: number;
+  targetKills: number;
+  iconIndex: number;
+}
+
+export interface RankDef {
+  rank: number;
+  title: string;
+  reqStage: number;
+  atkBonusPct: number;
+  medalReward: number;
+}
+
+export interface ActiveDungeonState {
+  id: DungeonId;
+  tier: number;
+  timeLeft: number;
+  maxTime: number;
+  kills: number;
+  targetKills: number;
+  earnedGold: number;
+  earnedOre: number;
+  earnedMedals: number;
+}
+
+export interface DungeonResultModal {
+  id: DungeonId;
+  tier: number;
+  cleared: boolean;
+  kills: number;
+  targetKills: number;
+  gold: number;
+  ore: number;
+  medals: number;
 }
 
 export interface EquipItem {
@@ -101,7 +158,8 @@ export type QuestGoalType =
   | 'stanceSwitch'
   | 'rally'
   | 'refine'
-  | 'bossKills';
+  | 'bossKills'
+  | 'dungeonClears';
 
 export interface QuestDef {
   index: number;
@@ -125,6 +183,7 @@ export interface EnemyEntity {
   kind: EnemyKind;
   name: string;
   isBoss: boolean;
+  bossVisualRow?: number;
   x: number;
   knockbackX: number;
   hp: number;
@@ -132,7 +191,6 @@ export interface EnemyEntity {
   atk: number;
   attackTimer: number;
   attackInterval: number;
-  /** Boss heavy strike windup 0..1 — switch to Bulwark to Perfect Guard! */
   heavyWindup: number;
   heavyCooldown: number;
   stunTimer: number;
@@ -169,7 +227,7 @@ export interface FloatingText {
 
 export interface VfxInstance {
   id: number;
-  cell: 0 | 1 | 2 | 3; // 0=slash, 1=crit, 2=explosion, 3=rallyBeam
+  cell: 0 | 1 | 2 | 3;
   x: number;
   y: number;
   scale: number;
@@ -213,7 +271,9 @@ export interface ComputedStats {
   lifesteal: number;
   bossDmgMult: number;
   codexAtkBonus: number;
+  rankAtkBonus: number;
   dps: number;
+  cp: number;
   forgeLevel: number;
   rankTitle: string;
 }
@@ -227,6 +287,7 @@ export type GameEventType =
   | 'forge'
   | 'forgeRare'
   | 'rally'
+  | 'skill'
   | 'stance'
   | 'perfectGuard'
   | 'questClaim'
@@ -256,17 +317,25 @@ export interface SaveData {
   training: Record<TrainingKey, number>;
   companions: Record<CompanionId, number>;
   facilities: Record<FacilityKey, number>;
+  skillLevels: Record<KnightSkillId, number>;
+  dungeonTickets: Record<DungeonId, number>;
+  dungeonTiers: Record<DungeonId, number>;
+  ticketRechargeTimer: number;
+  claimedRank: number;
   questIndex: number;
   questBaseline: number;
   discoveredEnemies: string[];
   discoveredBosses: number[];
   speedMult: 1 | 2 | 3;
   autoRally: boolean;
+  autoSkill: boolean;
   autoForge: boolean;
+  autoForgeFilter: AutoForgeFilter;
   soundEnabled: boolean;
   bgmEnabled: boolean;
   totalKills: number;
   totalBossKills: number;
+  totalDungeonClears: number;
   totalForges: number;
   totalRefines: number;
   totalStanceSwitches: number;
@@ -280,8 +349,8 @@ export interface SaveData {
 export interface GameState {
   stage: number;
   highestStage: number;
-  wave: number; // 1..5
-  farmMode: boolean; // true = loop waves 1..4 safely until player taps Boss Challenge
+  wave: number;
+  farmMode: boolean;
   gold: number;
   ore: number;
   medals: number;
@@ -296,6 +365,17 @@ export interface GameState {
   companions: Record<CompanionId, number>;
   facilities: Record<FacilityKey, number>;
 
+  skillLevels: Record<KnightSkillId, number>;
+  skillCooldowns: Record<KnightSkillId, number>;
+  oathBuffTimer: number;
+
+  dungeonTickets: Record<DungeonId, number>;
+  dungeonTiers: Record<DungeonId, number>;
+  ticketRechargeTimer: number;
+  activeDungeon: ActiveDungeonState | null;
+  dungeonResult: DungeonResultModal | null;
+
+  claimedRank: number;
   questIndex: number;
   questBaseline: number;
   discoveredEnemies: string[];
@@ -316,7 +396,7 @@ export interface GameState {
   companionTimers: Record<CompanionId, number>;
   companionCastTimers: Record<CompanionId, number>;
 
-  morale: number; // 0..100
+  morale: number;
   rallyTimer: number;
   guardBurstTimer: number;
   autoForgeTimer: number;
@@ -326,7 +406,9 @@ export interface GameState {
 
   speedMult: 1 | 2 | 3;
   autoRally: boolean;
+  autoSkill: boolean;
   autoForge: boolean;
+  autoForgeFilter: AutoForgeFilter;
   soundEnabled: boolean;
   bgmEnabled: boolean;
   buyStep: 1 | 10;
@@ -340,6 +422,7 @@ export interface GameState {
 
   totalKills: number;
   totalBossKills: number;
+  totalDungeonClears: number;
   totalForges: number;
   totalRefines: number;
   totalStanceSwitches: number;

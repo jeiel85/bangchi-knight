@@ -1,5 +1,6 @@
 import type {
   CompanionDef,
+  DungeonDef,
   EnemyKind,
   EquipItem,
   EquipSlot,
@@ -7,7 +8,9 @@ import type {
   ItemRarity,
   ItemTraitDef,
   ItemTraitId,
+  KnightSkillDef,
   QuestDef,
+  RankDef,
   StanceDef,
   TrainingDef,
   ZoneDef,
@@ -100,6 +103,68 @@ export const ENEMY_CATALOG: Array<{ kind: Exclude<EnemyKind, 'boss'>; name: stri
   { kind: 'golem', name: '서리 골렘', row: 5 },
   { kind: 'wyvern', name: '화염 와이번', row: 6 },
 ];
+
+export const KNIGHT_SKILLS: KnightSkillDef[] = [
+  {
+    id: 'whirlwind',
+    name: '회전 참격',
+    desc: '화면 내 모든 적에게 광역 베기 피해',
+    cooldown: 6.0,
+    unlockStage: 1,
+    baseUpgradeCost: 65,
+    iconIndex: 0,
+  },
+  {
+    id: 'judgment',
+    name: '왕국의 심판',
+    desc: '전방 적/보스에게 천벌 낙하 + 1.3초 기절',
+    cooldown: 10.0,
+    unlockStage: 2,
+    baseUpgradeCost: 110,
+    iconIndex: 1,
+  },
+  {
+    id: 'oath',
+    name: '기사단의 맹세',
+    desc: '체력 22% 회복 + 5.5초 치명타 +40% & 공속 +28%',
+    cooldown: 14.0,
+    unlockStage: 3,
+    baseUpgradeCost: 150,
+    iconIndex: 2,
+  },
+];
+
+export const DUNGEONS: DungeonDef[] = [
+  {
+    id: 'oreMine',
+    name: '왕실 광산 토벌',
+    subtitle: 'ORE MINE RUSH · 25초',
+    desc: '제한 시간 내 광산 괴물을 소탕해 대량의 철광석을 캐냅니다.',
+    durationSec: 25,
+    targetKills: 10,
+    iconIndex: 3,
+  },
+  {
+    id: 'bossArena',
+    name: '보스 러시 투기장',
+    subtitle: 'BOSS RUSH ARENA · 35초',
+    desc: '연속으로 등장하는 구역 보스 3체를 격파하고 골드와 훈장을 얻습니다.',
+    durationSec: 35,
+    targetKills: 3,
+    iconIndex: 4,
+  },
+];
+
+export const RANKS: RankDef[] = [
+  { rank: 0, title: '견습 원정기사', reqStage: 1, atkBonusPct: 0, medalReward: 0 },
+  { rank: 1, title: '국경 수호기사', reqStage: 3, atkBonusPct: 20, medalReward: 2 },
+  { rank: 2, title: '청강 정예기사', reqStage: 5, atkBonusPct: 45, medalReward: 3 },
+  { rank: 3, title: '원정 기사단장', reqStage: 9, atkBonusPct: 80, medalReward: 5 },
+  { rank: 4, title: '왕국 대장군', reqStage: 13, atkBonusPct: 130, medalReward: 8 },
+];
+
+export const TICKET_RECHARGE_SEC = 180;
+export const MAX_DUNGEON_TICKETS = 5;
 
 export const STANCES: StanceDef[] = [
   {
@@ -297,10 +362,11 @@ const STORY_QUESTS: Omit<QuestDef, 'index'>[] = [
   { title: '전술 진형 1회 전환해보기', goalType: 'stanceSwitch', target: 1, rewardGold: 120, rewardOre: 14 },
   { title: '대장간에서 장비 제련 +1 강화하기', goalType: 'refine', target: 1, rewardGold: 150, rewardOre: 16 },
   { title: 'STAGE 2 돌파하기', goalType: 'stage', target: 2, rewardGold: 220, rewardOre: 20, rewardMedals: 1 },
-  { title: '사기를 모아 진격 나팔 1회 발동하기', goalType: 'rally', target: 1, rewardGold: 240, rewardOre: 22 },
-  { title: '대장간 누적 단조 5회 달성', goalType: 'forges', target: 5, rewardGold: 320, rewardOre: 28 },
-  { title: '원정대 동료 2명 이상 편성하기', goalType: 'companions', target: 2, rewardGold: 420, rewardOre: 32, rewardMedals: 1 },
-  { title: 'STAGE 4 도달하기 (왕국 귀환 해금)', goalType: 'stage', target: 4, rewardGold: 600, rewardOre: 45, rewardMedals: 2 },
+  { title: '특수 던전(광산/보스 러시) 1회 클리어', goalType: 'dungeonClears', target: 1, rewardGold: 280, rewardOre: 28, rewardMedals: 1 },
+  { title: '사기를 모아 진격 나팔 1회 발동하기', goalType: 'rally', target: 1, rewardGold: 260, rewardOre: 22 },
+  { title: '대장간 누적 단조 5회 달성', goalType: 'forges', target: 5, rewardGold: 340, rewardOre: 30 },
+  { title: '원정대 동료 2명 이상 편성하기', goalType: 'companions', target: 2, rewardGold: 440, rewardOre: 34, rewardMedals: 1 },
+  { title: 'STAGE 4 도달하기 (왕국 귀환 해금)', goalType: 'stage', target: 4, rewardGold: 620, rewardOre: 48, rewardMedals: 2 },
 ];
 
 export function getQuestDef(index: number): QuestDef {
@@ -308,10 +374,10 @@ export function getQuestDef(index: number): QuestDef {
     return { index, ...STORY_QUESTS[index] };
   }
   const loop = index - STORY_QUESTS.length;
-  const cycle = loop % 4;
-  const tier = Math.floor(loop / 4) + 1;
-  const goldScale = Math.round(360 * Math.pow(1.42, tier));
-  const oreScale = Math.round(24 + tier * 10);
+  const cycle = loop % 5;
+  const tier = Math.floor(loop / 5) + 1;
+  const goldScale = Math.round(380 * Math.pow(1.42, tier));
+  const oreScale = Math.round(26 + tier * 10);
 
   if (cycle === 0) {
     return {
@@ -341,6 +407,17 @@ export function getQuestDef(index: number): QuestDef {
       target: 2 + Math.floor(tier / 2),
       rewardGold: Math.round(goldScale * 1.2),
       rewardOre: oreScale + 8,
+    };
+  }
+  if (cycle === 3) {
+    return {
+      index,
+      title: `특수 던전 ${1 + Math.floor(tier / 2)}회 클리어`,
+      goalType: 'dungeonClears',
+      target: 1 + Math.floor(tier / 2),
+      rewardGold: Math.round(goldScale * 1.35),
+      rewardOre: oreScale + 12,
+      rewardMedals: 1,
     };
   }
   return {
@@ -410,6 +487,10 @@ export function getForgeOreCost(forgeLevel: number): number {
 
 export function getRefineCost(refineLevel: number): number {
   return Math.floor(35 * Math.pow(1.36, refineLevel));
+}
+
+export function getSkillUpgradeCost(def: KnightSkillDef, level: number): number {
+  return Math.floor(def.baseUpgradeCost * Math.pow(1.32, Math.max(0, level - 1)));
 }
 
 export function getTrainingCost(def: TrainingDef, level: number): number {
@@ -491,10 +572,16 @@ export function rollForgedItem(stage: number, forgeLevel: number, uid: string): 
   };
 }
 
-export function getKnightRankTitle(highestStage: number): string {
-  if (highestStage >= 13) return '왕국 대장군';
-  if (highestStage >= 9) return '원정 기사단장';
-  if (highestStage >= 5) return '청강 정예기사';
-  if (highestStage >= 3) return '국경 수호기사';
-  return '견습 원정기사';
+export function getRankDef(claimedRank: number): RankDef {
+  return RANKS[Math.min(RANKS.length - 1, Math.max(0, claimedRank))];
+}
+
+export function getNextClaimableRank(claimedRank: number, highestStage: number): RankDef | null {
+  const next = RANKS[claimedRank + 1];
+  if (!next) return null;
+  return highestStage >= next.reqStage ? next : null;
+}
+
+export function getKnightRankTitle(claimedRank: number): string {
+  return getRankDef(claimedRank).title;
 }

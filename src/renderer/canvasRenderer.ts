@@ -29,7 +29,12 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   }
 
   // 1. Rich Pixel-Art Zone Background with cobblestone road parallax scrolling
-  const bgImg = assets.bg[zone.id];
+  const activeBgId = state.activeDungeon
+    ? state.activeDungeon.id === 'oreMine'
+      ? 'frostpeak'
+      : 'cinder-citadel'
+    : zone.id;
+  const bgImg = assets.bg[activeBgId];
   if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
     ctx.drawImage(bgImg, 0, 0, ARENA_WIDTH, GROUND_Y, 0, 0, ARENA_WIDTH, GROUND_Y);
 
@@ -266,8 +271,32 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.restore();
   }
 
-  // 10. Boss Dedicated Top Nameplate & HP Bar + Heavy Attack Telegraph
-  if (activeBoss) {
+  // 10. Boss Dedicated Top Nameplate & HP Bar + Dungeon Countdown Bar
+  if (state.activeDungeon) {
+    const d = state.activeDungeon;
+    const barW = 224;
+    const bx = Math.round((ARENA_WIDTH - barW) / 2);
+    const by = 10;
+    const ratio = Math.max(0, d.timeLeft / d.maxTime);
+    ctx.fillStyle = 'rgba(11, 18, 32, 0.9)';
+    ctx.fillRect(bx - 6, by - 4, barW + 12, 28);
+    ctx.strokeStyle = d.id === 'oreMine' ? '#38bdf8' : '#ef4444';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx - 6, by - 4, barW + 12, 28);
+    ctx.font = '700 10px Galmuri9, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fef08a';
+    const dName = d.id === 'oreMine' ? '⛏️ 광산 토벌' : '👑 보스 러시';
+    ctx.fillText(
+      `${dName} Lv.${d.tier} · ${d.kills}/${d.targetKills} · ${d.timeLeft.toFixed(1)}s`,
+      ARENA_WIDTH / 2,
+      by + 8
+    );
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(bx, by + 13, barW, 7);
+    ctx.fillStyle = ratio < 0.25 ? '#ef4444' : d.id === 'oreMine' ? '#38bdf8' : '#f59e0b';
+    ctx.fillRect(bx, by + 13, Math.round(barW * ratio), 7);
+  } else if (activeBoss) {
     const barW = 200;
     const bx = Math.round((ARENA_WIDTH - barW) / 2);
     const by = 10;
@@ -333,7 +362,7 @@ function drawEnemy(
   if (e.isBoss) {
     drawShadow(ctx, ex, GROUND_Y + 6, 30);
     if (assets.bosses.complete && assets.bosses.naturalWidth > 0) {
-      const bossRow = zoneIndex % 5;
+      const bossRow = (e.bossVisualRow ?? zoneIndex) % 5;
       const src = e.hitFlash > 0.25 && assets.whiteFlash.bosses ? assets.whiteFlash.bosses : assets.bosses;
       ctx.drawImage(src, frame * 80, bossRow * 80, 80, 80, ex - 40, Math.round(GROUND_Y - 70), 80, 80);
     }

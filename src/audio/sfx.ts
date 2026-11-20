@@ -128,6 +128,10 @@ class SfxManager {
         this.tone(ctx, 'sawtooth', 440, 440, 0.14, 0.075, now + 0.11);
         this.tone(ctx, 'sawtooth', 587, 600, 0.28, 0.08, now + 0.24);
         break;
+      case 'skill':
+        this.tone(ctx, 'sawtooth', 320, 820, 0.14, 0.075, now);
+        this.tone(ctx, 'square', 640, 1180, 0.1, 0.05, now + 0.05);
+        break;
       case 'stance':
         this.tone(ctx, 'square', 440, 660, 0.07, 0.05, now);
         break;

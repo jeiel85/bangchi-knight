@@ -1,31 +1,42 @@
 import {
   COMPANIONS,
+  DUNGEONS,
   FACILITIES,
+  KNIGHT_SKILLS,
+  MAX_DUNGEON_TICKETS,
   RARITY_CONFIG,
   STANCES,
+  TICKET_RECHARGE_SEC,
   TRAININGS,
+  ZONES,
   createStarterEquipment,
   getCompanionCost,
   getFacilityCost,
   getForgeLevel,
   getForgeOreCost,
   getKnightRankTitle,
+  getNextClaimableRank,
   getQuestDef,
+  getRankDef,
   getRefineCost,
+  getSkillUpgradeCost,
   getTrainingCost,
   getZoneForStage,
   getZoneIndexForStage,
   rollForgedItem,
 } from './data';
 import type {
+  AutoForgeFilter,
   CompanionId,
   ComputedStats,
+  DungeonId,
   EnemyEntity,
   EnemyKind,
   EquipSlot,
   FacilityKey,
   GameEvent,
   GameState,
+  KnightSkillId,
   QuestDef,
   SaveData,
   StanceId,
@@ -58,7 +69,7 @@ export class BangchiEngine {
     this.demoMode = Boolean(options?.demoMode);
     this.state = this.createInitialState(saved);
     if (!this.demoMode && saved?.savedAt) {
-      this.computeOfflineLoot(saved.savedAt);
+      this.computeOfflineProgress(saved.savedAt);
     }
     this.spawnWave();
   }
@@ -107,6 +118,27 @@ export class BangchiEngine {
         guildHall: saved?.facilities?.guildHall ?? 0,
       },
 
+      skillLevels: {
+        whirlwind: saved?.skillLevels?.whirlwind ?? 1,
+        judgment: saved?.skillLevels?.judgment ?? 1,
+        oath: saved?.skillLevels?.oath ?? 1,
+      },
+      skillCooldowns: { whirlwind: 0, judgment: 0, oath: 0 },
+      oathBuffTimer: 0,
+
+      dungeonTickets: {
+        oreMine: saved?.dungeonTickets?.oreMine ?? 2,
+        bossArena: saved?.dungeonTickets?.bossArena ?? 2,
+      },
+      dungeonTiers: {
+        oreMine: saved?.dungeonTiers?.oreMine ?? 1,
+        bossArena: saved?.dungeonTiers?.bossArena ?? 1,
+      },
+      ticketRechargeTimer: saved?.ticketRechargeTimer ?? 0,
+      activeDungeon: null,
+      dungeonResult: null,
+
+      claimedRank: saved?.claimedRank ?? 0,
       questIndex: saved?.questIndex ?? 0,
       questBaseline: saved?.questBaseline ?? 0,
       discoveredEnemies: Array.isArray(saved?.discoveredEnemies) ? [...saved.discoveredEnemies] : [],
@@ -137,7 +169,9 @@ export class BangchiEngine {
 
       speedMult: saved?.speedMult ?? 1,
       autoRally: saved?.autoRally ?? false,
+      autoSkill: saved?.autoSkill ?? true,
       autoForge: saved?.autoForge ?? false,
+      autoForgeFilter: saved?.autoForgeFilter ?? 'upgrade',
       soundEnabled: saved?.soundEnabled ?? true,
       bgmEnabled: saved?.bgmEnabled ?? false,
       buyStep: 1,
@@ -151,6 +185,7 @@ export class BangchiEngine {
 
       totalKills: saved?.totalKills ?? 0,
       totalBossKills: saved?.totalBossKills ?? 0,
+      totalDungeonClears: saved?.totalDungeonClears ?? 0,
       totalForges: saved?.totalForges ?? 0,
       totalRefines: saved?.totalRefines ?? 0,
       totalStanceSwitches: saved?.totalStanceSwitches ?? 0,
@@ -167,12 +202,21 @@ export class BangchiEngine {
     return state;
   }
 
-  private computeOfflineLoot(savedAt: number): void {
+  private computeOfflineProgress(savedAt: number): void {
     const elapsed = Math.floor((Date.now() - savedAt) / 1000);
-    if (elapsed < 60) return; // Require at least 1 minute away
+    if (elapsed < 60) return;
     const capped = Math.min(elapsed, 12 * 3600);
-    const stats = this.computeStats();
     const s = this.state;
+
+    // Recharge dungeon tickets while away!
+    const gainedTickets = Math.floor((s.ticketRechargeTimer + capped) / TICKET_RECHARGE_SEC);
+    if (gainedTickets > 0) {
+      s.dungeonTickets.oreMine = Math.min(MAX_DUNGEON_TICKETS, s.dungeonTickets.oreMine + gainedTickets);
+      s.dungeonTickets.bossArena = Math.min(MAX_DUNGEON_TICKETS, s.dungeonTickets.bossArena + gainedTickets);
+    }
+    s.ticketRechargeTimer = (s.ticketRechargeTimer + capped) % TICKET_RECHARGE_SEC;
+
+    const stats = this.computeStats();
     const avgEnemyHp = Math.max(30, 44 * Math.pow(1.34, s.stage - 1));
     const killsPerSec = Math.min(1.6, Math.max(0.18, (stats.dps / avgEnemyHp) * 0.65));
     const kills = Math.max(1, Math.floor(capped * killsPerSec));
@@ -227,6 +271,7 @@ export class BangchiEngine {
     const supplyMult = 1 + s.facilities.supplyWagon * 0.3;
     const codexCount = s.discoveredEnemies.length + s.discoveredBosses.length;
     const codexAtkBonus = codexCount * 0.025;
+    const rankAtkBonus = getRankDef(s.claimedRank).atkBonusPct / 100;
 
     const eqList = [s.equipment.weapon, s.equipment.shield, s.equipment.armor];
     let bonusCrit = 0;
@@ -251,13 +296,15 @@ export class BangchiEngine {
 
     const rallyAtkMult = s.rallyTimer > 0 ? 1.55 : 1;
     const rallyApsMult = s.rallyTimer > 0 ? 1.4 : 1;
+    const oathCritBonus = s.oathBuffTimer > 0 ? 0.4 : 0;
+    const oathApsMult = s.oathBuffTimer > 0 ? 1.28 : 1;
 
     const weaponAtk = this.getEffectiveEquipPower('weapon');
     const baseAtk = 10 + weaponAtk + s.training.swordplay * 5;
-    const atk = baseAtk * academyMult * (1 + codexAtkBonus) * stance.atkMult * rallyAtkMult;
+    const atk = baseAtk * academyMult * (1 + codexAtkBonus) * (1 + rankAtkBonus) * stance.atkMult * rallyAtkMult;
 
-    const aps = 1.12 * (1 + bonusSpeed) * stance.apsMult * rallyApsMult;
-    const critChance = Math.min(0.85, 0.1 + s.training.swordplay * 0.006 + bonusCrit);
+    const aps = 1.12 * (1 + bonusSpeed) * stance.apsMult * rallyApsMult * oathApsMult;
+    const critChance = Math.min(0.95, 0.1 + s.training.swordplay * 0.006 + bonusCrit + oathCritBonus);
     const critMult = 1.75;
 
     const shieldHp = this.getEffectiveEquipPower('shield');
@@ -277,6 +324,12 @@ export class BangchiEngine {
       s.companions.pyro > 0
         ? (atk * (0.95 + s.companions.pyro * 0.28) * 1.6) / COMPANIONS[1].interval
         : 0;
+    const skillBonusDps =
+      (atk * (2.4 + s.skillLevels.whirlwind * 0.22)) / 6 +
+      (s.highestStage >= 2 ? (atk * (3.9 + s.skillLevels.judgment * 0.35)) / 10 : 0);
+
+    const dps = heroDps + rangerDps + pyroDps;
+    const cp = Math.round((dps + skillBonusDps * 0.5) * 4.2 + maxHp * 0.45 + def * 3.5);
 
     return {
       atk,
@@ -292,48 +345,266 @@ export class BangchiEngine {
       lifesteal,
       bossDmgMult,
       codexAtkBonus,
-      dps: heroDps + rangerDps + pyroDps,
+      rankAtkBonus,
+      dps,
+      cp,
       forgeLevel: getForgeLevel(s.forgeExp),
-      rankTitle: getKnightRankTitle(s.highestStage),
+      rankTitle: getKnightRankTitle(s.claimedRank),
     };
+  }
+
+  public castSkill(skillId: KnightSkillId): boolean {
+    const s = this.state;
+    const def = KNIGHT_SKILLS.find((k) => k.id === skillId);
+    if (!def) return false;
+    if (s.highestStage < def.unlockStage && !this.demoMode) return false;
+    if (s.skillCooldowns[skillId] > 0) return false;
+    if (skillId !== 'oath' && s.enemies.length === 0) return false;
+
+    const stats = this.computeStats();
+    const lv = s.skillLevels[skillId];
+    s.skillCooldowns[skillId] = def.cooldown;
+    s.heroAction = 'swing';
+    s.heroActionTimer = 0.28;
+
+    if (skillId === 'whirlwind') {
+      const mult = 2.4 + (lv - 1) * 0.25;
+      s.screenShake = 5;
+      this.spawnVfx(0, HERO_X + 44, GROUND_Y - 22, 1.35, 0.35);
+      for (const e of s.enemies) {
+        if (e.x - HERO_X < 210) {
+          this.damageEnemy(e, stats.atk * mult * (e.isBoss ? stats.bossDmgMult : 1), true, '#fde047');
+        }
+      }
+      this.spawnText(HERO_X + 18, GROUND_Y - 62, '회전 참격!', '#fde047', 11, true);
+      this.addMorale(8);
+    } else if (skillId === 'judgment') {
+      const front = this.getFrontEnemy();
+      if (front) {
+        const mult = 3.9 + (lv - 1) * 0.38;
+        front.stunTimer = Math.max(front.stunTimer, 1.3);
+        front.heavyWindup = 0;
+        this.spawnVfx(3, front.x, GROUND_Y - 30, 1.25, 0.52);
+        this.damageEnemy(front, stats.atk * mult * (front.isBoss ? stats.bossDmgMult : 1), true, '#38bdf8');
+        this.spawnText(front.x, GROUND_Y - 68, '⚡ 왕국의 심판!', '#38bdf8', 11, true);
+        s.screenShake = 7;
+      }
+      this.addMorale(10);
+    } else if (skillId === 'oath') {
+      const healAmt = Math.round(stats.maxHp * (0.22 + (lv - 1) * 0.02));
+      s.heroHp = Math.min(stats.maxHp, s.heroHp + healAmt);
+      s.oathBuffTimer = 5.5 + (lv - 1) * 0.3;
+      this.spawnVfx(3, HERO_X, GROUND_Y - 24, 1.0, 0.48);
+      this.spawnText(HERO_X, GROUND_Y - 60, `기사단의 맹세 +${healAmt}`, '#4ade80', 11, true);
+      this.addMorale(10);
+    }
+
+    this.emit('skill');
+    return true;
+  }
+
+  public upgradeSkill(skillId: KnightSkillId): boolean {
+    const def = KNIGHT_SKILLS.find((k) => k.id === skillId)!;
+    const lv = this.state.skillLevels[skillId];
+    if (lv >= 25) return false;
+    const cost = getSkillUpgradeCost(def, lv);
+    if (this.state.gold < cost) return false;
+    this.state.gold -= cost;
+    this.state.skillLevels[skillId] = lv + 1;
+    this.emit('upgrade');
+    return true;
+  }
+
+  public claimRankPromotion(): boolean {
+    const next = getNextClaimableRank(this.state.claimedRank, this.state.highestStage);
+    if (!next) return false;
+    this.state.claimedRank = next.rank;
+    this.state.medals += next.medalReward;
+    this.state.bannerText = `👑 [${next.title}] 승급! 공격력 +${next.atkBonusPct}% · 훈장 +${next.medalReward}`;
+    this.state.bannerTimer = 2.6;
+    this.spawnVfx(3, HERO_X, GROUND_Y - 26, 1.35, 0.7);
+    this.emit('returnKingdom');
+    return true;
+  }
+
+  public jumpToStage(targetStage: number): boolean {
+    if (this.state.activeDungeon) return false;
+    const clamped = Math.max(1, Math.min(this.state.highestStage, targetStage));
+    this.state.stage = clamped;
+    this.state.wave = 1;
+    this.state.farmMode = clamped < this.state.highestStage;
+    this.state.enemies = [];
+    this.state.projectiles = [];
+    const zone = getZoneForStage(clamped);
+    this.state.bannerText = `🗺️ STAGE ${clamped} · ${zone.name} 이동!`;
+    this.state.bannerTimer = 1.8;
+    this.spawnWave();
+    return true;
+  }
+
+  public enterDungeon(id: DungeonId): boolean {
+    const s = this.state;
+    if (s.activeDungeon || s.dungeonTickets[id] <= 0) return false;
+    const def = DUNGEONS.find((d) => d.id === id)!;
+    s.dungeonTickets[id] -= 1;
+
+    const tier = s.dungeonTiers[id];
+    const stats = this.computeStats();
+    s.heroHp = stats.maxHp;
+    s.heroShield = 0;
+    s.enemies = [];
+    s.projectiles = [];
+    s.dungeonResult = null;
+    s.activeDungeon = {
+      id,
+      tier,
+      timeLeft: def.durationSec,
+      maxTime: def.durationSec,
+      kills: 0,
+      targetKills: def.targetKills,
+      earnedGold: 0,
+      earnedOre: 0,
+      earnedMedals: 0,
+    };
+
+    s.bannerText = `⚔️ ${def.name} Lv.${tier} 입장!`;
+    s.bannerTimer = 1.9;
+    this.spawnDungeonWave();
+    this.emit('bossWarning');
+    return true;
+  }
+
+  public abandonDungeon(): void {
+    if (!this.state.activeDungeon) return;
+    this.finishDungeon(false);
+  }
+
+  public dismissDungeonResult(): void {
+    this.state.dungeonResult = null;
+  }
+
+  private finishDungeon(cleared: boolean): void {
+    const s = this.state;
+    const d = s.activeDungeon;
+    if (!d) return;
+
+    let bonusGold = 0;
+    let bonusOre = 0;
+    let bonusMedals = 0;
+    if (cleared) {
+      s.dungeonTiers[d.id] += 1;
+      s.totalDungeonClears += 1;
+      if (d.id === 'oreMine') {
+        bonusOre = Math.round(18 + d.tier * 12);
+        bonusGold = Math.round(80 * Math.pow(1.3, d.tier - 1));
+      } else {
+        bonusGold = Math.round(240 * Math.pow(1.35, d.tier - 1));
+        bonusOre = Math.round(10 + d.tier * 5);
+        bonusMedals = Math.max(1, Math.floor(1 + d.tier * 0.7));
+      }
+      this.emit('bossKill');
+    } else {
+      this.emit('retreat');
+    }
+
+    const totalGold = d.earnedGold + bonusGold;
+    const totalOre = d.earnedOre + bonusOre;
+    const totalMedals = d.earnedMedals + bonusMedals;
+
+    s.gold += totalGold;
+    s.ore += totalOre;
+    s.medals += totalMedals;
+
+    s.dungeonResult = {
+      id: d.id,
+      tier: d.tier,
+      cleared,
+      kills: d.kills,
+      targetKills: d.targetKills,
+      gold: totalGold,
+      ore: totalOre,
+      medals: totalMedals,
+    };
+
+    s.activeDungeon = null;
+    s.enemies = [];
+    s.projectiles = [];
+    const stats = this.computeStats();
+    s.heroHp = stats.maxHp;
+    this.spawnWave();
+  }
+
+  private spawnDungeonWave(): void {
+    const s = this.state;
+    const d = s.activeDungeon;
+    if (!d) return;
+    const tierFactor = Math.pow(1.42, d.tier - 1);
+
+    if (d.id === 'oreMine') {
+      const remaining = Math.max(1, d.targetKills - d.kills);
+      const batch = Math.min(3, remaining);
+      s.enemies = [];
+      for (let i = 0; i < batch; i++) {
+        const kind: EnemyKind = i === 0 ? 'golem' : 'goblin';
+        const maxHp = Math.round(62 * tierFactor);
+        s.enemies.push({
+          id: this.nextId++,
+          kind,
+          name: kind === 'golem' ? '광석 골렘' : '보물 고블린',
+          isBoss: false,
+          x: ARENA_WIDTH + 20 + i * 36,
+          knockbackX: 0,
+          hp: maxHp,
+          maxHp,
+          atk: Math.round(5 * Math.pow(1.2, d.tier - 1)),
+          attackTimer: 1.4,
+          attackInterval: 2.2,
+          heavyWindup: 0,
+          heavyCooldown: 99,
+          stunTimer: 0,
+          hitFlash: 0,
+          animTime: i * 0.4,
+          goldReward: Math.round(14 * tierFactor),
+          oreReward: Math.max(3, Math.round(3 + d.tier * 2.2)),
+        });
+      }
+      return;
+    }
+
+    // Boss Rush Arena: consecutive Zone Bosses!
+    const bossRow = (d.tier + d.kills - 1) % ZONES.length;
+    const zone = ZONES[bossRow];
+    const maxHp = Math.round(190 * tierFactor * (1 + d.kills * 0.25));
+    s.enemies = [
+      {
+        id: this.nextId++,
+        kind: 'boss',
+        name: `${zone.bossName} (Lv.${d.tier})`,
+        isBoss: true,
+        bossVisualRow: bossRow,
+        x: ARENA_WIDTH + 32,
+        knockbackX: 0,
+        hp: maxHp,
+        maxHp,
+        atk: Math.round(13 * Math.pow(1.24, d.tier - 1)),
+        attackTimer: 1.3,
+        attackInterval: 2.0,
+        heavyWindup: 0,
+        heavyCooldown: 3.6,
+        stunTimer: 0,
+        hitFlash: 0,
+        animTime: 0,
+        goldReward: Math.round(75 * tierFactor),
+        oreReward: Math.max(3, Math.round(3 + d.tier * 1.4)),
+      },
+    ];
   }
 
   public getCurrentQuestStatus(): { def: QuestDef; progress: number; complete: boolean } {
     const s = this.state;
     const def = getQuestDef(s.questIndex);
-    const isLoopQuest = s.questIndex >= 10;
-    let raw = 0;
-
-    switch (def.goalType) {
-      case 'kills':
-        raw = s.totalKills;
-        break;
-      case 'forges':
-        raw = s.totalForges;
-        break;
-      case 'stage':
-        raw = s.highestStage;
-        break;
-      case 'companions':
-        raw =
-          (s.companions.ranger > 0 ? 1 : 0) +
-          (s.companions.pyro > 0 ? 1 : 0) +
-          (s.companions.banneret > 0 ? 1 : 0);
-        break;
-      case 'stanceSwitch':
-        raw = s.totalStanceSwitches;
-        break;
-      case 'rally':
-        raw = s.totalRallies;
-        break;
-      case 'refine':
-        raw = s.totalRefines;
-        break;
-      case 'bossKills':
-        raw = s.totalBossKills;
-        break;
-    }
-
+    const isLoopQuest = s.questIndex >= 11;
+    const raw = this.getQuestMetricRaw(def.goalType);
     const progress = isLoopQuest ? Math.max(0, raw - s.questBaseline) : raw;
     return { def, progress: Math.min(def.target, progress), complete: progress >= def.target };
   }
@@ -348,7 +619,7 @@ export class BangchiEngine {
 
     s.questIndex += 1;
     const nextDef = getQuestDef(s.questIndex);
-    if (s.questIndex >= 10) {
+    if (s.questIndex >= 11) {
       s.questBaseline = this.getQuestMetricRaw(nextDef.goalType);
     } else {
       s.questBaseline = 0;
@@ -365,16 +636,32 @@ export class BangchiEngine {
     switch (goalType) {
       case 'kills': return s.totalKills;
       case 'forges': return s.totalForges;
+      case 'stage': return s.highestStage;
+      case 'companions':
+        return (
+          (s.companions.ranger > 0 ? 1 : 0) +
+          (s.companions.pyro > 0 ? 1 : 0) +
+          (s.companions.banneret > 0 ? 1 : 0)
+        );
+      case 'stanceSwitch': return s.totalStanceSwitches;
+      case 'rally': return s.totalRallies;
       case 'refine': return s.totalRefines;
       case 'bossKills': return s.totalBossKills;
-      default: return 0;
+      case 'dungeonClears': return s.totalDungeonClears;
     }
+  }
+
+  public cycleAutoForgeFilter(): AutoForgeFilter {
+    const order: AutoForgeFilter[] = ['upgrade', 'rare', 'epic'];
+    const idx = order.indexOf(this.state.autoForgeFilter);
+    this.state.autoForgeFilter = order[(idx + 1) % order.length];
+    return this.state.autoForgeFilter;
   }
 
   public toSaveData(): SaveData {
     const s = this.state;
     return {
-      version: 3,
+      version: 4,
       stage: s.stage,
       highestStage: s.highestStage,
       wave: s.wave,
@@ -393,17 +680,25 @@ export class BangchiEngine {
       training: { ...s.training },
       companions: { ...s.companions },
       facilities: { ...s.facilities },
+      skillLevels: { ...s.skillLevels },
+      dungeonTickets: { ...s.dungeonTickets },
+      dungeonTiers: { ...s.dungeonTiers },
+      ticketRechargeTimer: Math.floor(s.ticketRechargeTimer),
+      claimedRank: s.claimedRank,
       questIndex: s.questIndex,
       questBaseline: s.questBaseline,
       discoveredEnemies: [...s.discoveredEnemies],
       discoveredBosses: [...s.discoveredBosses],
       speedMult: s.speedMult,
       autoRally: s.autoRally,
+      autoSkill: s.autoSkill,
       autoForge: s.autoForge,
+      autoForgeFilter: s.autoForgeFilter,
       soundEnabled: s.soundEnabled,
       bgmEnabled: s.bgmEnabled,
       totalKills: s.totalKills,
       totalBossKills: s.totalBossKills,
+      totalDungeonClears: s.totalDungeonClears,
       totalForges: s.totalForges,
       totalRefines: s.totalRefines,
       totalStanceSwitches: s.totalStanceSwitches,
@@ -426,6 +721,7 @@ export class BangchiEngine {
   }
 
   public challengeBossNow(): void {
+    if (this.state.activeDungeon) return;
     this.state.farmMode = false;
     this.state.wave = 5;
     this.state.enemies = [];
@@ -438,7 +734,6 @@ export class BangchiEngine {
     this.state.totalStanceSwitches += 1;
     const def = this.getActiveStance();
 
-    // Check Perfect Guard if switching to Bulwark right while a Boss is telegraphing a heavy strike!
     const chargingBoss = this.state.enemies.find((e) => e.isBoss && e.heavyWindup >= 0.35);
     if (stance === 'bulwark' && chargingBoss) {
       chargingBoss.heavyWindup = 0;
@@ -452,7 +747,7 @@ export class BangchiEngine {
       this.state.screenShake = 6;
       this.damageEnemy(chargingBoss, stats.atk * 2.2, true, '#38bdf8');
       this.spawnVfx(3, HERO_X, GROUND_Y - 24, 1.0, 0.5);
-      this.spawnText(HERO_X, GROUND_Y - 62, '🛡️ 철벽 완벽 방어!', '#38bdf8', 12, true);
+      this.spawnText(HERO_X, GROUND_Y - 62, '철벽 완벽 방어!', '#38bdf8', 12, true);
       this.state.bannerText = '🛡️ 철벽 퍼펙트 가드! 보스 기절 & 사기 +24%';
       this.state.bannerTimer = 1.9;
       this.emit('perfectGuard');
@@ -503,9 +798,15 @@ export class BangchiEngine {
 
     if (isAuto) {
       const current = s.equipment[item.slot];
-      const isUpgrade = item.power > current.power || RARITY_CONFIG[item.rarity].rank >= 3;
-      if (!isUpgrade) {
-        // Auto-salvage weak rolls cleanly!
+      const rank = RARITY_CONFIG[item.rarity].rank;
+      const shouldStop =
+        s.autoForgeFilter === 'epic'
+          ? rank >= 3
+          : s.autoForgeFilter === 'rare'
+          ? rank >= 2 && (item.power > current.power || rank >= 3)
+          : item.power > current.power || rank >= 3;
+
+      if (!shouldStop) {
         const salvageGold = Math.round(18 * item.level * RARITY_CONFIG[item.rarity].mult);
         const salvageOre = Math.max(1, Math.floor(cost * 0.35));
         s.gold += salvageGold;
@@ -515,7 +816,6 @@ export class BangchiEngine {
         this.emit('forge');
         return true;
       }
-      // Pause auto-forge when an upgrade or Epic/Mythic drops!
       s.pendingForgeItem = item;
       this.emit('forgeRare');
       return true;
@@ -621,11 +921,11 @@ export class BangchiEngine {
   }
 
   public canReturnToKingdom(): boolean {
-    return this.state.stage >= 4;
+    return this.state.stage >= 4 && !this.state.activeDungeon;
   }
 
   public getReturnMedalReward(): number {
-    if (!this.canReturnToKingdom()) return 0;
+    if (this.state.stage < 4) return 0;
     return Math.floor(Math.pow(this.state.stage - 2, 1.45) * 2.5);
   }
 
@@ -667,6 +967,7 @@ export class BangchiEngine {
     s.screenShake = Math.max(0, s.screenShake - rawDt * 22);
     s.guardBurstTimer = Math.max(0, s.guardBurstTimer - rawDt);
     if (s.bannerTimer > 0) s.bannerTimer = Math.max(0, s.bannerTimer - rawDt);
+    if (s.oathBuffTimer > 0) s.oathBuffTimer = Math.max(0, s.oathBuffTimer - dt);
     if (s.comboTimer > 0) {
       s.comboTimer -= rawDt;
       if (s.comboTimer <= 0) s.comboCount = 0;
@@ -676,7 +977,38 @@ export class BangchiEngine {
       if (s.heroActionTimer <= 0) s.heroAction = 'march';
     }
 
-    // Auto-Forge tick when enabled and no pending modal
+    // Skill cooldowns
+    for (const sk of KNIGHT_SKILLS) {
+      if (s.skillCooldowns[sk.id] > 0) {
+        s.skillCooldowns[sk.id] = Math.max(0, s.skillCooldowns[sk.id] - dt);
+      }
+    }
+
+    // Ticket auto-recharge (real time)
+    if (!this.demoMode) {
+      const needsTicket =
+        s.dungeonTickets.oreMine < MAX_DUNGEON_TICKETS ||
+        s.dungeonTickets.bossArena < MAX_DUNGEON_TICKETS;
+      if (needsTicket) {
+        s.ticketRechargeTimer += rawDt;
+        if (s.ticketRechargeTimer >= TICKET_RECHARGE_SEC) {
+          s.ticketRechargeTimer -= TICKET_RECHARGE_SEC;
+          s.dungeonTickets.oreMine = Math.min(MAX_DUNGEON_TICKETS, s.dungeonTickets.oreMine + 1);
+          s.dungeonTickets.bossArena = Math.min(MAX_DUNGEON_TICKETS, s.dungeonTickets.bossArena + 1);
+        }
+      }
+    }
+
+    // Active Dungeon countdown
+    if (s.activeDungeon) {
+      s.activeDungeon.timeLeft -= rawDt;
+      if (s.activeDungeon.timeLeft <= 0) {
+        this.finishDungeon(false);
+        return;
+      }
+    }
+
+    // Auto-Forge
     if (!this.demoMode && s.autoForge && !s.pendingForgeItem) {
       s.autoForgeTimer += rawDt;
       if (s.autoForgeTimer >= 0.75) {
@@ -705,7 +1037,15 @@ export class BangchiEngine {
     }
 
     if (s.enemies.length === 0) {
-      this.advanceWave();
+      if (s.activeDungeon) {
+        if (s.activeDungeon.kills >= s.activeDungeon.targetKills) {
+          this.finishDungeon(true);
+          return;
+        }
+        this.spawnDungeonWave();
+      } else {
+        this.advanceWave();
+      }
     }
 
     const front = this.getFrontEnemy();
@@ -738,7 +1078,6 @@ export class BangchiEngine {
         }
 
         if (i < 2 && e.x - HERO_X <= (e.isBoss ? 76 : 82)) {
-          // Boss Heavy Strike Telegraph!
           if (e.isBoss) {
             if (e.heavyWindup > 0) {
               e.heavyWindup += dt / 1.35;
@@ -769,6 +1108,17 @@ export class BangchiEngine {
       if (s.heroAttackTimer <= 0 && front) {
         s.heroAttackTimer = 1 / stats.aps;
         this.performKnightSwing(front, stats);
+      }
+
+      // Auto-cast active knight skills
+      if (s.autoSkill || this.demoMode) {
+        if (s.skillCooldowns.oath <= 0 && s.highestStage >= 3 && s.heroHp < stats.maxHp * 0.85) {
+          this.castSkill('oath');
+        } else if (s.skillCooldowns.judgment <= 0 && s.highestStage >= 2) {
+          this.castSkill('judgment');
+        } else if (s.skillCooldowns.whirlwind <= 0) {
+          this.castSkill('whirlwind');
+        }
       }
 
       this.tickCompanions(dt, stats);
@@ -902,7 +1252,6 @@ export class BangchiEngine {
       s.heroHp = Math.min(stats.maxHp, s.heroHp + dmg * stats.lifesteal);
     }
 
-    // Epic/Mythic Trait: Double Strike!
     if (stats.doubleStrikeChance > 0 && Math.random() < stats.doubleStrikeChance && target.hp > 0) {
       this.damageEnemy(target, dmg * 0.75, false, '#38bdf8');
       this.spawnText(target.x, GROUND_Y - 50, '연쇄 일격!', '#38bdf8', 9, true);
@@ -955,10 +1304,14 @@ export class BangchiEngine {
     }
 
     if (s.heroHp <= 0) {
+      if (s.activeDungeon) {
+        this.finishDungeon(false);
+        return;
+      }
       s.heroHp = stats.maxHp;
       s.heroShield = 0;
       s.wave = 1;
-      s.farmMode = true; // Safely switch to repeat farming so player doesn't get stuck dying!
+      s.farmMode = true;
       s.enemies = [];
       s.bannerText = '전열 재정비 — 반복 파밍 전환 (강화 후 보스 도전!)';
       s.bannerTimer = 2.4;
@@ -977,15 +1330,22 @@ export class BangchiEngine {
 
       const goldGain = Math.max(1, Math.round(e.goldReward * stats.goldMult));
       const oreGain = Math.max(1, Math.round(e.oreReward * stats.oreMult));
-      s.gold += goldGain;
-      s.ore += oreGain;
+
+      if (s.activeDungeon) {
+        s.activeDungeon.kills += 1;
+        s.activeDungeon.earnedGold += goldGain;
+        s.activeDungeon.earnedOre += oreGain;
+      } else {
+        s.gold += goldGain;
+        s.ore += oreGain;
+      }
 
       this.spawnText(e.x - 8, GROUND_Y - 14, `+${goldGain}G`, '#facc15', 9);
       this.spawnText(e.x + 12, GROUND_Y - 26, `+${oreGain}광석`, '#93c5fd', 9);
       this.spawnBurst(e.x, GROUND_Y - 18, '#facc15', e.isBoss ? 20 : 8);
       this.spawnLootDrops(e.x, e.isBoss ? 5 : 2);
 
-      if (e.isBoss) {
+      if (e.isBoss && !s.activeDungeon) {
         s.totalBossKills += 1;
         s.bannerText = `🚩 STAGE ${s.stage} 점령 완료!`;
         s.bannerTimer = 2.0;
@@ -997,7 +1357,6 @@ export class BangchiEngine {
   private advanceWave(): void {
     const s = this.state;
     if (s.farmMode) {
-      // Loop waves 1..4 safely while farming
       s.wave = s.wave >= 4 ? 1 : s.wave + 1;
       this.spawnWave();
       return;
@@ -1040,6 +1399,7 @@ export class BangchiEngine {
           kind: 'boss',
           name: zone.bossName,
           isBoss: true,
+          bossVisualRow: zoneIndex,
           x: ARENA_WIDTH + 34,
           knockbackX: 0,
           hp: maxHp,
@@ -1171,7 +1531,6 @@ export class BangchiEngine {
       const d = s.lootDrops[i];
       d.life -= dt;
       if (d.life < 0.28) {
-        // Zip smoothly toward hero for pickup feel
         d.x += (HERO_X - d.x) * Math.min(1, dt * 12);
         d.y += (GROUND_Y - 24 - d.y) * Math.min(1, dt * 12);
       } else {
