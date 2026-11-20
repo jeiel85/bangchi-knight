@@ -1,18 +1,27 @@
 import { sfx } from '../audio/sfx';
 import {
   COMPANIONS,
+  ENEMY_CATALOG,
   FACILITIES,
+  ITEM_TRAITS,
   RARITY_CONFIG,
   SLOT_META,
   STANCES,
   TRAININGS,
+  ZONES,
   getCompanionCost,
   getFacilityCost,
-  getTrainingCost,
+  getRefineCost,
   getZoneForStage,
 } from '../engine/data';
 import { ARENA_HEIGHT, ARENA_WIDTH, BangchiEngine } from '../engine/gameEngine';
-import { clearSaveData, loadSaveData, writeSaveData } from '../engine/storage';
+import {
+  clearSaveData,
+  decodeSaveCode,
+  encodeSaveCode,
+  loadSaveData,
+  writeSaveData,
+} from '../engine/storage';
 import type { CompanionId, EquipSlot, FacilityKey, StanceId, TrainingKey } from '../engine/types';
 import { renderArena } from '../renderer/canvasRenderer';
 
@@ -62,11 +71,13 @@ function fmtTime(sec: number): string {
 export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): () => void {
   const engine = new BangchiEngine(loadSaveData());
   sfx.enabled = engine.state.soundEnabled;
+  sfx.setBgm(engine.state.bgmEnabled);
 
   let activeTab: TabKey = 'forge';
   let lastUiSync = 0;
   let lastSave = performance.now();
   let lastForgeSig = '';
+  let confirmCallback: (() => void) | null = null;
 
   root.innerHTML = `
     <div class="game-viewport">
@@ -110,11 +121,20 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
         <div class="arena-container">
           <canvas id="game-canvas" width="${ARENA_WIDTH}" height="${ARENA_HEIGHT}"></canvas>
+          <button class="arena-boss-btn hidden" id="btn-boss-challenge">
+            ⚔️ 보스 도전
+          </button>
           <button class="arena-rally-btn" id="btn-rally">
             <span class="inline-flex">${pxIcon('rally', 15)} 진격 나팔</span>
             <small id="rally-sub">20%</small>
           </button>
         </div>
+
+        <button class="quest-strip" id="quest-strip" title="퀘스트 완료 시 클릭해 보상 수령">
+          <span class="quest-tag" id="quest-tag">Q#1</span>
+          <span class="quest-title" id="quest-title">로딩 중...</span>
+          <span class="quest-prog" id="quest-prog">0/1</span>
+        </button>
 
         <div class="tactics-strip">
           <div class="stance-bar" id="stance-bar">
@@ -127,10 +147,11 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             `
             ).join('')}
           </div>
-          <div class="quick-bar">
+          <div class="quick-bar five">
             <button class="quick-btn" id="q-auto">자동나팔</button>
-            <button class="quick-btn" id="q-speed">1배속</button>
-            <button class="quick-btn" id="q-sound">소리 ON</button>
+            <button class="quick-btn" id="q-speed">1x</button>
+            <button class="quick-btn" id="q-sound">SFX</button>
+            <button class="quick-btn" id="q-bgm">BGM</button>
             <button class="quick-btn" id="q-save">저장</button>
           </div>
         </div>
@@ -147,6 +168,24 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <div class="modal-backdrop hidden" id="forge-modal">
           <div class="modal-card" id="forge-modal-content"></div>
         </div>
+
+        <div class="modal-backdrop hidden" id="offline-modal">
+          <div class="modal-card" id="offline-modal-content"></div>
+        </div>
+
+        <div class="modal-backdrop hidden" id="confirm-modal">
+          <div class="modal-card">
+            <div class="modal-kicker">CONFIRMATION</div>
+            <h3 id="confirm-title">확인</h3>
+            <p class="confirm-desc" id="confirm-desc"></p>
+            <div class="modal-actions two">
+              <button class="btn btn-ghost btn-sm" id="confirm-cancel">취소</button>
+              <button class="btn btn-amber btn-sm" id="confirm-ok">확인</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="toast-pill hidden" id="toast-pill"></div>
       </div>
     </div>
   `;
@@ -156,10 +195,42 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   const panelBody = root.querySelector<HTMLElement>('#panel-body')!;
   const forgeModal = root.querySelector<HTMLElement>('#forge-modal')!;
   const forgeModalContent = root.querySelector<HTMLElement>('#forge-modal-content')!;
+  const offlineModal = root.querySelector<HTMLElement>('#offline-modal')!;
+  const offlineModalContent = root.querySelector<HTMLElement>('#offline-modal-content')!;
+  const confirmModal = root.querySelector<HTMLElement>('#confirm-modal')!;
+  const toastEl = root.querySelector<HTMLElement>('#toast-pill')!;
+
+  let toastTimer: number | null = null;
+  function showToast(msg: string): void {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('hidden');
+    if (toastTimer !== null) clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toastEl.classList.add('hidden'), 1700);
+  }
+
+  function openConfirm(title: string, desc: string, onOk: () => void): void {
+    root.querySelector('#confirm-title')!.textContent = title;
+    root.querySelector('#confirm-desc')!.textContent = desc;
+    confirmCallback = onOk;
+    confirmModal.classList.remove('hidden');
+  }
+
+  root.querySelector('#confirm-cancel')?.addEventListener('click', () => {
+    confirmModal.classList.add('hidden');
+    confirmCallback = null;
+  });
+
+  root.querySelector('#confirm-ok')?.addEventListener('click', () => {
+    confirmModal.classList.add('hidden');
+    const cb = confirmCallback;
+    confirmCallback = null;
+    cb?.();
+  });
 
   root.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 
   root.querySelector('#back-landing-btn')?.addEventListener('click', () => {
+    sfx.setBgm(false);
     writeSaveData(engine.toSaveData());
     onBackToLanding();
   });
@@ -167,6 +238,21 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   root.querySelector('#btn-rally')?.addEventListener('click', () => {
     sfx.unlock();
     engine.triggerRally();
+  });
+
+  root.querySelector('#btn-boss-challenge')?.addEventListener('click', () => {
+    sfx.unlock();
+    engine.challengeBossNow();
+    showToast('⚔️ 구역 보스에 도전합니다!');
+  });
+
+  root.querySelector('#quest-strip')?.addEventListener('click', () => {
+    sfx.unlock();
+    if (engine.claimQuestReward()) {
+      updateQuestBar();
+      renderTab();
+      showToast('📜 퀘스트 보상을 수령했습니다!');
+    }
   });
 
   root.querySelector('#stance-bar')?.addEventListener('click', (ev) => {
@@ -180,6 +266,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   const qAuto = root.querySelector<HTMLButtonElement>('#q-auto')!;
   const qSpeed = root.querySelector<HTMLButtonElement>('#q-speed')!;
   const qSound = root.querySelector<HTMLButtonElement>('#q-sound')!;
+  const qBgm = root.querySelector<HTMLButtonElement>('#q-bgm')!;
   const qSave = root.querySelector<HTMLButtonElement>('#q-save')!;
 
   qAuto.addEventListener('click', () => {
@@ -187,7 +274,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     updateQuickButtons();
   });
   qSpeed.addEventListener('click', () => {
-    engine.state.speedMult = engine.state.speedMult === 1 ? 2 : 1;
+    engine.state.speedMult = engine.state.speedMult === 1 ? 2 : engine.state.speedMult === 2 ? 3 : 1;
     updateQuickButtons();
   });
   qSound.addEventListener('click', () => {
@@ -195,12 +282,15 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     sfx.enabled = engine.state.soundEnabled;
     updateQuickButtons();
   });
+  qBgm.addEventListener('click', () => {
+    sfx.unlock();
+    engine.state.bgmEnabled = !engine.state.bgmEnabled;
+    sfx.setBgm(engine.state.bgmEnabled);
+    updateQuickButtons();
+  });
   qSave.addEventListener('click', () => {
     writeSaveData(engine.toSaveData());
-    qSave.textContent = '완료!';
-    setTimeout(() => {
-      qSave.textContent = '저장';
-    }, 850);
+    showToast('💾 진행 상황이 저장되었습니다!');
   });
 
   root.querySelectorAll<HTMLButtonElement>('.nav-tab').forEach((btn) => {
@@ -220,10 +310,22 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
     const action = btn.dataset.action;
     if (action === 'forge-now') {
-      if (engine.forgeEquipment()) {
+      if (engine.forgeEquipment(false)) {
         renderForgeModal();
         renderTab();
       }
+    } else if (action === 'toggle-autoforge') {
+      engine.state.autoForge = !engine.state.autoForge;
+      renderTab();
+      showToast(engine.state.autoForge ? '⚡ 자동 단조 ON (상위 장비 시 정지)' : '자동 단조 OFF');
+    } else if (action === 'refine-slot') {
+      const slot = btn.dataset.slot as EquipSlot;
+      if (engine.refineSlot(slot)) {
+        renderTab();
+      }
+    } else if (action === 'buy-step') {
+      engine.state.buyStep = engine.state.buyStep === 1 ? 10 : 1;
+      renderTab();
     } else if (action === 'buy-training') {
       if (engine.buyTraining(btn.dataset.key as TrainingKey)) {
         renderTab();
@@ -239,22 +341,53 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     } else if (action === 'kingdom-return') {
       if (engine.canReturnToKingdom()) {
         const reward = engine.getReturnMedalReward();
-        if (
-          window.confirm(
-            `왕국으로 귀환하여 훈장 +${reward}개를 획득하고 STAGE 1부터 재출정할까요?\n(훈장과 왕국 영구 시설, 대장간 숙련도는 유지됩니다)`
-          )
-        ) {
-          engine.performKingdomReturn();
-          writeSaveData(engine.toSaveData());
-          renderTab();
-        }
+        openConfirm(
+          '🏰 왕국 귀환',
+          `훈장 +${reward}개를 정산하고 STAGE 1부터 재출정할까요? (훈장, 왕국 시설, 대장간 숙련도, 도감은 영구 유지됩니다)`,
+          () => {
+            engine.performKingdomReturn();
+            writeSaveData(engine.toSaveData());
+            renderTab();
+            showToast(`🏅 훈장 +${reward} 획득! 재출정 시작!`);
+          }
+        );
       }
+    } else if (action === 'export-save') {
+      const code = encodeSaveCode(engine.toSaveData());
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        void navigator.clipboard.writeText(code).then(
+          () => showToast('📋 세이브 코드가 클립보드에 복사되었습니다!'),
+          () => window.prompt('아래 세이브 코드를 복사하세요:', code)
+        );
+      } else {
+        window.prompt('아래 세이브 코드를 복사하세요:', code);
+      }
+    } else if (action === 'import-save') {
+      const code = window.prompt('복원할 세이브 코드를 붙여넣으세요:');
+      if (!code) return;
+      const parsed = decodeSaveCode(code);
+      if (!parsed) {
+        showToast('⚠ 올바른 세이브 코드가 아닙니다.');
+        return;
+      }
+      engine.loadFromSaveData(parsed);
+      writeSaveData(engine.toSaveData());
+      updateStanceButtons();
+      updateQuickButtons();
+      renderTab();
+      showToast('✅ 세이브 복원 완료!');
     } else if (action === 'reset-save') {
-      if (window.confirm('모든 원정 기록과 왕국 시설을 초기화할까요?')) {
-        clearSaveData();
-        engine.resetGame();
-        renderTab();
-      }
+      openConfirm(
+        '세이브 초기화',
+        '모든 원정 기록, 장비, 왕국 영구 시설, 도감을 처음 상태로 되돌릴까요?',
+        () => {
+          clearSaveData();
+          engine.resetGame();
+          updateStanceButtons();
+          renderTab();
+          showToast('초기화가 완료되었습니다.');
+        }
+      );
     }
   });
 
@@ -268,19 +401,62 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     renderTab();
   });
 
+  offlineModal.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-offline-claim]');
+    if (!btn) return;
+    sfx.unlock();
+    engine.claimOfflineLoot();
+    offlineModal.classList.add('hidden');
+    renderTab();
+  });
+
+  function renderOfflineModalIfNeeded(): void {
+    const rep = engine.state.offlineReport;
+    if (!rep) return;
+    offlineModal.classList.remove('hidden');
+    offlineModalContent.innerHTML = `
+      <div class="modal-kicker">OFFLINE EXPEDITION LOOT</div>
+      <h3>📦 방치 원정 전리품 도착!</h3>
+      <p class="confirm-desc">자리를 비운 <strong>${fmtTime(rep.elapsedSeconds)}</strong> 동안 원정대가 몬스터 <strong>${fmtNum(rep.kills)}마리</strong>를 토벌했습니다.</p>
+      <div class="offline-loot-row">
+        <div class="loot-chip">${pxIcon('gold', 20)} <strong>+${fmtNum(rep.gold)}</strong></div>
+        <div class="loot-chip">${pxIcon('ore', 20)} <strong>+${fmtNum(rep.ore)}</strong></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-amber btn-sm" data-offline-claim="1">전리품 수령하기</button>
+      </div>
+    `;
+  }
+
   function updateStanceButtons(): void {
+    const bossCharging = engine.state.enemies.some((e) => e.isBoss && e.heavyWindup > 0.15);
     root.querySelectorAll<HTMLButtonElement>('[data-stance]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.stance === engine.state.stance);
+      const id = btn.dataset.stance;
+      btn.classList.toggle('active', id === engine.state.stance);
+      btn.classList.toggle('guard-cue', id === 'bulwark' && bossCharging && engine.state.stance !== 'bulwark');
     });
   }
 
   function updateQuickButtons(): void {
     qAuto.classList.toggle('on', engine.state.autoRally);
-    qAuto.textContent = engine.state.autoRally ? '자동나팔 ON' : '자동나팔';
-    qSpeed.classList.toggle('on', engine.state.speedMult === 2);
-    qSpeed.textContent = `${engine.state.speedMult}배속`;
+    qAuto.textContent = engine.state.autoRally ? '자동나팔' : '수동나팔';
+    qSpeed.classList.toggle('on', engine.state.speedMult > 1);
+    qSpeed.textContent = `${engine.state.speedMult}x`;
     qSound.classList.toggle('on', engine.state.soundEnabled);
-    qSound.textContent = engine.state.soundEnabled ? '소리 ON' : '음소거';
+    qSound.textContent = engine.state.soundEnabled ? 'SFX ON' : 'SFX OFF';
+    qBgm.classList.toggle('on', engine.state.bgmEnabled);
+    qBgm.textContent = engine.state.bgmEnabled ? 'BGM ON' : 'BGM OFF';
+  }
+
+  function updateQuestBar(): void {
+    const q = engine.getCurrentQuestStatus();
+    const strip = root.querySelector<HTMLButtonElement>('#quest-strip')!;
+    strip.classList.toggle('complete', q.complete);
+    root.querySelector('#quest-tag')!.textContent = `Q#${q.def.index + 1}`;
+    root.querySelector('#quest-title')!.textContent = q.def.title;
+    root.querySelector('#quest-prog')!.textContent = q.complete
+      ? `수령 +${fmtNum(q.def.rewardGold)}G`
+      : `${q.progress}/${q.def.target}`;
   }
 
   function renderForgeModal(): void {
@@ -300,6 +476,8 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     const curRarity = RARITY_CONFIG[cur.rarity];
     const diff = item.power - cur.power;
     const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+    const newTrait = item.trait ? ITEM_TRAITS[item.trait] : null;
+    const curTrait = cur.trait ? ITEM_TRAITS[cur.trait] : null;
 
     forgeModal.classList.remove('hidden');
     forgeModalContent.innerHTML = `
@@ -311,6 +489,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           <div class="item-name" style="color:${curRarity.color}">[${curRarity.label}] ${cur.name}</div>
           <div class="item-stat">${slotInfo.statLabel} <strong>${cur.power}</strong></div>
           <div class="item-bonus">${cur.bonusLabel}</div>
+          ${curTrait ? `<div class="trait-chip">✨ ${curTrait.name}</div>` : ''}
         </div>
         <div class="item-box highlight" style="border-color:${newRarity.color}">
           <div class="item-tag" style="color:${newRarity.color}">신규 단조 (Lv.${item.level})</div>
@@ -320,6 +499,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             <span class="diff-pill ${diff >= 0 ? 'up' : 'down'}">${diffStr}</span>
           </div>
           <div class="item-bonus">${item.bonusLabel}</div>
+          ${newTrait ? `<div class="trait-chip" title="${newTrait.desc}">✨ ${newTrait.name}</div>` : ''}
         </div>
       </div>
       <div class="modal-actions">
@@ -342,16 +522,18 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         <div class="panel-header">
           <div>
             <h4>야전 대장간 · 숙련 Lv.${stats.forgeLevel}</h4>
-            <p>광석으로 장비를 단조할수록 희귀·신화 확률이 올라갑니다</p>
+            <p>장비 단조 + 골드 제련(+강화)으로 전력을 끌어올리세요</p>
           </div>
-          <span class="ore-badge inline-flex">${pxIcon('ore', 14)}<span id="forge-ore-val">${fmtNum(s.ore)}</span></span>
+          <button class="toggle-chip ${s.autoForge ? 'on' : ''}" data-action="toggle-autoforge">
+            ⚡ 자동단조 ${s.autoForge ? 'ON' : 'OFF'}
+          </button>
         </div>
 
         <button class="anvil-cta ${canForge ? 'ready' : ''}" data-action="forge-now" ${canForge ? '' : 'disabled'}>
           <span class="anvil-icon-box">${pxIcon('forge', 30)}</span>
           <div class="anvil-copy">
             <strong>장비 즉시 단조하기</strong>
-            <small class="inline-flex">소모 광석 ${pxIcon('ore', 13)} ${oreCost} · 무작위 무기/방패/갑옷 제작</small>
+            <small class="inline-flex">소모 광석 ${pxIcon('ore', 13)} ${oreCost} · 보유 ${fmtNum(s.ore)}</small>
           </div>
         </button>
 
@@ -359,18 +541,37 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           ${slots
             .map((slot) => {
               const item = s.equipment[slot];
+              const refLv = s.refineLevels[slot];
+              const refCost = getRefineCost(refLv);
+              const canRefine = refLv < 30 && s.gold >= refCost;
+              const effPower = engine.getEffectiveEquipPower(slot);
               const meta = SLOT_META[slot];
               const rar = RARITY_CONFIG[item.rarity];
+              const trait = item.trait ? ITEM_TRAITS[item.trait] : null;
               return `
                 <div class="equip-card" style="border-left: 3px solid ${rar.color}">
-                  <div class="equip-top">
-                    <span class="inline-flex">${pxIcon(slot, 16)} ${meta.label}</span>
-                    <span class="rar-chip" style="color:${rar.color}">${rar.label} · Lv.${item.level}</span>
-                  </div>
-                  <div class="equip-name">${item.name}</div>
-                  <div class="equip-stats">
-                    <span>${meta.statLabel} <strong>+${item.power}</strong></span>
-                    <span class="equip-bonus">${item.bonusLabel}</span>
+                  <div class="equip-row-flex">
+                    <div class="equip-info">
+                      <div class="equip-top">
+                        <span class="inline-flex">${pxIcon(slot, 16)} ${meta.label} ${refLv > 0 ? `<em class="refine-tag">+${refLv}</em>` : ''}</span>
+                        <span class="rar-chip" style="color:${rar.color}">${rar.label} · Lv.${item.level}</span>
+                      </div>
+                      <div class="equip-name">${item.name}</div>
+                      <div class="equip-stats">
+                        <span>${meta.statLabel} <strong>+${effPower}</strong></span>
+                        <span class="equip-bonus">${item.bonusLabel}</span>
+                      </div>
+                      ${trait ? `<div class="trait-chip inline">✨ ${trait.name}: ${trait.desc}</div>` : ''}
+                    </div>
+                    <button
+                      class="refine-btn ${canRefine ? 'can-buy' : ''}"
+                      data-action="refine-slot"
+                      data-slot="${slot}"
+                      ${canRefine ? '' : 'disabled'}
+                    >
+                      <span>${refLv >= 30 ? 'MAX' : '제련 +1'}</span>
+                      <small class="inline-flex">${refLv >= 30 ? '' : `${pxIcon('gold', 11)}${fmtNum(refCost)}`}</small>
+                    </button>
                   </div>
                 </div>
               `;
@@ -390,6 +591,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
             <h4>원정대 동료 &amp; 기사 훈련</h4>
             <p>동료를 영입하면 전장에 직접 합류해 함께 싸웁니다</p>
           </div>
+          <button class="toggle-chip on" data-action="buy-step">훈련 x${s.buyStep}</button>
         </div>
 
         <div class="sub-label">원정대 용병 (전장 직접 참전)</div>
@@ -416,11 +618,11 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           }).join('')}
         </div>
 
-        <div class="sub-label">기사단 기초 훈련</div>
+        <div class="sub-label">기사단 기초 훈련 (x${s.buyStep})</div>
         <div class="row-list">
           ${TRAININGS.map((t) => {
             const lv = s.training[t.key];
-            const cost = getTrainingCost(t, lv);
+            const cost = engine.getTrainingBatchCost(t.key, s.buyStep);
             const canBuy = s.gold >= cost;
             return `
               <div class="item-row">
@@ -432,7 +634,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
                   </div>
                 </div>
                 <button class="buy-btn ${canBuy ? 'can-buy' : ''}" data-action="buy-training" data-key="${t.key}" ${canBuy ? '' : 'disabled'}>
-                  <span>훈련</span>
+                  <span>+${s.buyStep}</span>
                   <small class="inline-flex">${pxIcon('gold', 12)} ${fmtNum(cost)}</small>
                 </button>
               </div>
@@ -499,13 +701,36 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
         </div>
       `;
     } else {
+      const totalCodex = ENEMY_CATALOG.length + ZONES.length;
+      const foundCodex = s.discoveredEnemies.length + s.discoveredBosses.length;
       panelBody.innerHTML = `
         <div class="panel-header">
           <div>
-            <h4>원정 일지 &amp; 전투 기록</h4>
-            <p>현재 원정대 전력과 누적 업적</p>
+            <h4>원정 일지 &amp; 몬스터 도감</h4>
+            <p>도감 발견 1종당 공격력 +2.5% (현재 +${(stats.codexAtkBonus * 100).toFixed(1)}%)</p>
           </div>
-          <span class="ore-badge">최고 STG ${s.highestStage}</span>
+          <span class="ore-badge">${foundCodex}/${totalCodex}</span>
+        </div>
+
+        <div class="codex-grid">
+          ${ENEMY_CATALOG.map((en) => {
+            const seen = s.discoveredEnemies.includes(en.kind);
+            return `
+              <div class="codex-cell ${seen ? 'seen' : ''}" title="${seen ? en.name : '미발견'}">
+                <span class="codex-sprite enemy" style="background-image:url('./assets/sprites/enemies.png');background-position: 0 ${-en.row * 34}px;"></span>
+                <small>${seen ? en.name : '???'}</small>
+              </div>
+            `;
+          }).join('')}
+          ${ZONES.map((z, idx) => {
+            const seen = s.discoveredBosses.includes(idx);
+            return `
+              <div class="codex-cell boss ${seen ? 'seen' : ''}" title="${seen ? z.bossName : '미발견 보스'}">
+                <span class="codex-sprite boss" style="background-image:url('./assets/sprites/bosses.png');background-position: 0 ${-idx * 40}px;"></span>
+                <small>${seen ? z.bossName : '??? 보스'}</small>
+              </div>
+            `;
+          }).join('')}
         </div>
 
         <div class="stat-grid">
@@ -514,17 +739,17 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
           <div class="stat-cell"><span>치명타 확률</span><strong>${(stats.critChance * 100).toFixed(1)}%</strong></div>
           <div class="stat-cell"><span>방어력</span><strong>${fmtNum(stats.def)}</strong></div>
           <div class="stat-cell"><span>최대 체력</span><strong>${fmtNum(stats.maxHp)}</strong></div>
-          <div class="stat-cell"><span>초당 회복</span><strong>${stats.regenPerSec.toFixed(1)}/s</strong></div>
-          <div class="stat-cell"><span>골드 배율</span><strong>${(stats.goldMult * 100).toFixed(0)}%</strong></div>
-          <div class="stat-cell"><span>광석 배율</span><strong>${(stats.oreMult * 100).toFixed(0)}%</strong></div>
+          <div class="stat-cell"><span>철벽 방어 성공</span><strong>${s.totalPerfectGuards}회</strong></div>
           <div class="stat-cell"><span>누적 처치</span><strong>${fmtNum(s.totalKills)}</strong></div>
           <div class="stat-cell"><span>누적 단조</span><strong>${fmtNum(s.totalForges)}회</strong></div>
-          <div class="stat-cell"><span>왕국 귀환</span><strong>${s.expeditionReturns}회</strong></div>
+          <div class="stat-cell"><span>최고 스테이지</span><strong>STG ${s.highestStage}</strong></div>
           <div class="stat-cell"><span>원정 시간</span><strong>${fmtTime(s.totalPlaySeconds)}</strong></div>
         </div>
 
-        <div class="danger-zone">
-          <button class="btn btn-danger btn-sm" data-action="reset-save">세이브 초기화</button>
+        <div class="save-actions">
+          <button class="btn btn-ghost btn-sm" data-action="export-save">📋 코드 백업</button>
+          <button class="btn btn-ghost btn-sm" data-action="import-save">📥 코드 복원</button>
+          <button class="btn btn-danger btn-sm" data-action="reset-save">초기화</button>
         </div>
       `;
     }
@@ -535,7 +760,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     const stats = engine.computeStats();
     const zone = getZoneForStage(s.stage);
 
-    root.querySelector('#hud-stage')!.textContent = `STAGE ${s.stage}-${s.wave}`;
+    root.querySelector('#hud-stage')!.textContent = `STAGE ${s.stage}-${s.wave}${s.farmMode ? ' · 파밍' : ''}`;
     root.querySelector('#hud-zone')!.textContent = zone.name;
     root.querySelector('#hud-gold')!.textContent = fmtNum(s.gold);
     root.querySelector('#hud-ore')!.textContent = fmtNum(s.ore);
@@ -559,6 +784,8 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     }
     root.querySelector('#hud-wave-pips')!.innerHTML = pips;
 
+    root.querySelector('#btn-boss-challenge')!.classList.toggle('hidden', !s.farmMode);
+
     const rallyBtn = root.querySelector<HTMLButtonElement>('#btn-rally')!;
     const rallySub = root.querySelector('#rally-sub')!;
     const ready = s.morale >= 100 && s.rallyTimer <= 0;
@@ -566,19 +793,27 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
     rallyBtn.classList.toggle('active', s.rallyTimer > 0);
     rallyBtn.disabled = !ready;
     rallySub.textContent = s.rallyTimer > 0 ? `돌격 ${s.rallyTimer.toFixed(1)}s` : `${Math.floor(s.morale)}%`;
+
+    updateQuestBar();
+    updateStanceButtons();
   }
 
   function refreshButtonsLightweight(): void {
     const s = engine.state;
     if (activeTab === 'forge') {
       const btn = panelBody.querySelector<HTMLButtonElement>('[data-action="forge-now"]');
-      const oreVal = panelBody.querySelector('#forge-ore-val');
-      if (oreVal) oreVal.textContent = fmtNum(s.ore);
       if (btn) {
         const can = s.ore >= engine.getForgeCost() && !s.pendingForgeItem;
         btn.disabled = !can;
         btn.classList.toggle('ready', can);
       }
+      panelBody.querySelectorAll<HTMLButtonElement>('[data-action="refine-slot"]').forEach((rb) => {
+        const slot = rb.dataset.slot as EquipSlot;
+        const lv = s.refineLevels[slot];
+        const can = lv < 30 && s.gold >= getRefineCost(lv);
+        rb.disabled = !can;
+        rb.classList.toggle('can-buy', can);
+      });
     } else if (activeTab === 'squad') {
       panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-companion"]').forEach((btn) => {
         const id = btn.dataset.key as CompanionId;
@@ -589,8 +824,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
       });
       panelBody.querySelectorAll<HTMLButtonElement>('[data-action="buy-training"]').forEach((btn) => {
         const key = btn.dataset.key as TrainingKey;
-        const def = TRAININGS.find((t) => t.key === key)!;
-        const can = s.gold >= getTrainingCost(def, s.training[key]);
+        const can = s.gold >= engine.getTrainingBatchCost(key, s.buyStep);
         btn.disabled = !can;
         btn.classList.toggle('can-buy', can);
       });
@@ -601,6 +835,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
   updateQuickButtons();
   renderTab();
   updateHud();
+  renderOfflineModalIfNeeded();
 
   let rafId = 0;
   let lastFrame = performance.now();
@@ -638,6 +873,7 @@ export function mountGameShell(root: HTMLElement, onBackToLanding: () => void): 
 
   return () => {
     cancelAnimationFrame(rafId);
+    sfx.setBgm(false);
     window.removeEventListener('beforeunload', onUnload);
     writeSaveData(engine.toSaveData());
   };

@@ -1,9 +1,13 @@
 import type {
   CompanionDef,
+  EnemyKind,
   EquipItem,
   EquipSlot,
   FacilityDef,
   ItemRarity,
+  ItemTraitDef,
+  ItemTraitId,
+  QuestDef,
   StanceDef,
   TrainingDef,
   ZoneDef,
@@ -87,6 +91,16 @@ export const ZONES: ZoneDef[] = [
   },
 ];
 
+export const ENEMY_CATALOG: Array<{ kind: Exclude<EnemyKind, 'boss'>; name: string; row: number }> = [
+  { kind: 'goblin', name: '초원 고블린', row: 0 },
+  { kind: 'boar', name: '야생 멧돼지', row: 1 },
+  { kind: 'bandit', name: '협곡 산적', row: 2 },
+  { kind: 'scorpion', name: '사막 전갈', row: 3 },
+  { kind: 'bogling', name: '늪지 괴수', row: 4 },
+  { kind: 'golem', name: '서리 골렘', row: 5 },
+  { kind: 'wyvern', name: '화염 와이번', row: 6 },
+];
+
 export const STANCES: StanceDef[] = [
   {
     id: 'vanguard',
@@ -103,7 +117,7 @@ export const STANCES: StanceDef[] = [
   {
     id: 'bulwark',
     name: '철벽',
-    shortDesc: '피해 -40% · 보호막 생성',
+    shortDesc: '피해 -40% · 보스 방어',
     icon: '🛡️',
     color: '#38bdf8',
     atkMult: 0.92,
@@ -125,6 +139,13 @@ export const STANCES: StanceDef[] = [
     shieldRegenRatio: 0,
   },
 ];
+
+export const ITEM_TRAITS: Record<ItemTraitId, ItemTraitDef> = {
+  doubleStrike: { id: 'doubleStrike', name: '연쇄 일격', desc: '공격 시 20% 확률로 2연타 발동' },
+  vampiric: { id: 'vampiric', name: '흡혈 강철', desc: '가한 피해의 5%만큼 체력 회복' },
+  oreFinder: { id: 'oreFinder', name: '광산 축복', desc: '광석 획득량 +28%' },
+  bossBreaker: { id: 'bossBreaker', name: '거신 분쇄', desc: '보스 대상 최종 피해 +35%' },
+};
 
 export const TRAININGS: TrainingDef[] = [
   {
@@ -230,13 +251,13 @@ export const FACILITIES: FacilityDef[] = [
 
 export const RARITY_CONFIG: Record<
   ItemRarity,
-  { label: string; color: string; mult: number; weightBase: number }
+  { label: string; color: string; mult: number; rank: number }
 > = {
-  common: { label: '일반', color: '#cbd5e1', mult: 1.0, weightBase: 55 },
-  uncommon: { label: '고급', color: '#4ade80', mult: 1.28, weightBase: 28 },
-  rare: { label: '희귀', color: '#38bdf8', mult: 1.65, weightBase: 12 },
-  epic: { label: '영웅', color: '#c084fc', mult: 2.15, weightBase: 4 },
-  mythic: { label: '신화', color: '#facc15', mult: 2.95, weightBase: 1 },
+  common: { label: '일반', color: '#cbd5e1', mult: 1.0, rank: 0 },
+  uncommon: { label: '고급', color: '#4ade80', mult: 1.28, rank: 1 },
+  rare: { label: '희귀', color: '#38bdf8', mult: 1.65, rank: 2 },
+  epic: { label: '영웅', color: '#c084fc', mult: 2.15, rank: 3 },
+  mythic: { label: '신화', color: '#facc15', mult: 2.95, rank: 4 },
 };
 
 const ITEM_NAMES: Record<EquipSlot, Record<ItemRarity, string[]>> = {
@@ -268,6 +289,70 @@ export const SLOT_META: Record<EquipSlot, { label: string; statLabel: string; ic
   shield: { label: '방패', statLabel: '최대 체력', icon: '🛡️' },
   armor: { label: '갑옷', statLabel: '방어력', icon: '🦺' },
 };
+
+const STORY_QUESTS: Omit<QuestDef, 'index'>[] = [
+  { title: '야전 대장간에서 장비 1회 단조하기', goalType: 'forges', target: 1, rewardGold: 60, rewardOre: 8 },
+  { title: '초원 몬스터 6마리 처치하기', goalType: 'kills', target: 6, rewardGold: 80, rewardOre: 10 },
+  { title: '원정대 탭에서 동료 1명 영입하기', goalType: 'companions', target: 1, rewardGold: 110, rewardOre: 12 },
+  { title: '전술 진형 1회 전환해보기', goalType: 'stanceSwitch', target: 1, rewardGold: 120, rewardOre: 14 },
+  { title: '대장간에서 장비 제련 +1 강화하기', goalType: 'refine', target: 1, rewardGold: 150, rewardOre: 16 },
+  { title: 'STAGE 2 돌파하기', goalType: 'stage', target: 2, rewardGold: 220, rewardOre: 20, rewardMedals: 1 },
+  { title: '사기를 모아 진격 나팔 1회 발동하기', goalType: 'rally', target: 1, rewardGold: 240, rewardOre: 22 },
+  { title: '대장간 누적 단조 5회 달성', goalType: 'forges', target: 5, rewardGold: 320, rewardOre: 28 },
+  { title: '원정대 동료 2명 이상 편성하기', goalType: 'companions', target: 2, rewardGold: 420, rewardOre: 32, rewardMedals: 1 },
+  { title: 'STAGE 4 도달하기 (왕국 귀환 해금)', goalType: 'stage', target: 4, rewardGold: 600, rewardOre: 45, rewardMedals: 2 },
+];
+
+export function getQuestDef(index: number): QuestDef {
+  if (index < STORY_QUESTS.length) {
+    return { index, ...STORY_QUESTS[index] };
+  }
+  const loop = index - STORY_QUESTS.length;
+  const cycle = loop % 4;
+  const tier = Math.floor(loop / 4) + 1;
+  const goldScale = Math.round(360 * Math.pow(1.42, tier));
+  const oreScale = Math.round(24 + tier * 10);
+
+  if (cycle === 0) {
+    return {
+      index,
+      title: `몬스터 ${14 + tier * 4}마리 토벌`,
+      goalType: 'kills',
+      target: 14 + tier * 4,
+      rewardGold: goldScale,
+      rewardOre: oreScale,
+    };
+  }
+  if (cycle === 1) {
+    return {
+      index,
+      title: `대장간 장비 ${4 + tier}회 단조`,
+      goalType: 'forges',
+      target: 4 + tier,
+      rewardGold: Math.round(goldScale * 1.1),
+      rewardOre: oreScale + 6,
+    };
+  }
+  if (cycle === 2) {
+    return {
+      index,
+      title: `장비 제련 ${2 + Math.floor(tier / 2)}회 강화`,
+      goalType: 'refine',
+      target: 2 + Math.floor(tier / 2),
+      rewardGold: Math.round(goldScale * 1.2),
+      rewardOre: oreScale + 8,
+    };
+  }
+  return {
+    index,
+    title: `구역 보스 ${1 + Math.floor(tier / 2)}회 격파`,
+    goalType: 'bossKills',
+    target: 1 + Math.floor(tier / 2),
+    rewardGold: Math.round(goldScale * 1.45),
+    rewardOre: oreScale + 14,
+    rewardMedals: 1,
+  };
+}
 
 export function createStarterEquipment(): Record<EquipSlot, EquipItem> {
   return {
@@ -311,12 +396,20 @@ export function getZoneForStage(stage: number): ZoneDef {
   return ZONES[Math.floor((stage - 1) / 3) % ZONES.length];
 }
 
+export function getZoneIndexForStage(stage: number): number {
+  return Math.floor((stage - 1) / 3) % ZONES.length;
+}
+
 export function getForgeLevel(forgeExp: number): number {
   return Math.floor(Math.sqrt(forgeExp / 3)) + 1;
 }
 
 export function getForgeOreCost(forgeLevel: number): number {
   return Math.max(4, 4 + Math.floor((forgeLevel - 1) * 1.6));
+}
+
+export function getRefineCost(refineLevel: number): number {
+  return Math.floor(35 * Math.pow(1.36, refineLevel));
 }
 
 export function getTrainingCost(def: TrainingDef, level: number): number {
@@ -336,7 +429,6 @@ export function rollForgedItem(stage: number, forgeLevel: number, uid: string): 
   const slots: EquipSlot[] = ['weapon', 'shield', 'armor'];
   const slot = slots[Math.floor(Math.random() * slots.length)];
 
-  // Higher forge level shifts weights toward rare/epic/mythic
   const weights: Array<{ r: ItemRarity; w: number }> = [
     { r: 'common', w: Math.max(12, 56 - forgeLevel * 4.2) },
     { r: 'uncommon', w: 28 + Math.min(12, forgeLevel * 0.8) },
@@ -379,6 +471,12 @@ export function rollForgedItem(stage: number, forgeLevel: number, uid: string): 
   const names = ITEM_NAMES[slot][rarity];
   const name = names[Math.floor(Math.random() * names.length)];
 
+  let trait: ItemTraitId | undefined;
+  if (rarity === 'epic' || rarity === 'mythic') {
+    const traitPool: ItemTraitId[] = ['doubleStrike', 'vampiric', 'oreFinder', 'bossBreaker'];
+    trait = traitPool[Math.floor(Math.random() * traitPool.length)];
+  }
+
   return {
     id: uid,
     slot,
@@ -389,6 +487,7 @@ export function rollForgedItem(stage: number, forgeLevel: number, uid: string): 
     bonusLabel: bonus.label,
     bonusStat: bonus.stat,
     bonusValue: bonus.val,
+    trait,
   };
 }
 

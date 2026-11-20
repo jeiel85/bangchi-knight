@@ -42,11 +42,11 @@ export function mountLanding(root: HTMLElement, onPlay: () => void): () => void 
                 궁수·마법사·성기사 동료와 함께 왕국 국경을 돌파하세요.
               </p>
               <div class="pill-row">
-                <span class="pill">🔥 3종 전술 진형</span>
-                <span class="pill">🔨 실시간 대장간 단조</span>
+                <span class="pill">🔥 3종 전술 진형 &amp; 철벽 방어</span>
+                <span class="pill">🔨 자동 단조 · 제련 · 신화 특성</span>
                 <span class="pill">👥 원정대 동료 합류</span>
-                <span class="pill">🎺 진격 나팔 총공세</span>
-                <span class="pill">🎨 풀 픽셀 아트 스프라이트</span>
+                <span class="pill">📜 연속 퀘스트 &amp; 도감</span>
+                <span class="pill">📦 오프라인 전리품 &amp; BGM</span>
               </div>
               <div class="hero-actions">
                 <button class="btn btn-amber btn-lg" id="hero-play-btn">
@@ -96,23 +96,23 @@ export function mountLanding(root: HTMLElement, onPlay: () => void): () => void 
             <div class="card-grid four">
               <article class="feature-card">
                 <div class="feature-icon">🔥</div>
-                <h3>3종 전술 진형 전환</h3>
-                <p>돌격(폭딜), 철벽(방어막 &amp; 피해감소), 약탈(골드·광석 +55%) 진형을 상황에 맞게 원터치로 전환합니다.</p>
+                <h3>전술 진형 &amp; 철벽 퍼펙트 가드</h3>
+                <p>돌격·철벽·약탈 진형을 자유롭게 전환하고, 보스 강타 예고 순간 철벽 전환으로 완벽 방어 &amp; 기절 반격을 노립니다.</p>
               </article>
               <article class="feature-card">
                 <div class="feature-icon">🔨</div>
-                <h3>실시간 대장간 단조</h3>
-                <p>전투에서 얻은 광석으로 검·방패·갑옷을 즉시 단조합니다. 일반부터 신화까지 비교 후 장착하거나 분해해 숙련도를 올리세요.</p>
+                <h3>자동 단조 · 제련 · 신화 특성</h3>
+                <p>광석으로 장비를 단조하고 자동 분해, 골드 +제련 강화, 영웅/신화 고유 특성(연쇄 일격·흡혈·거신 분쇄)까지 파밍합니다.</p>
               </article>
               <article class="feature-card">
                 <div class="feature-icon">👥</div>
-                <h3>원정대 동료 합류</h3>
-                <p>혼자 싸우지 않습니다. 궁수의 관통 화살, 마법사의 광역 화염구, 성기사의 치유가 전장에 직접 펼쳐집니다.</p>
+                <h3>원정대 동료 &amp; 몬스터 도감</h3>
+                <p>궁수·마법사·성기사가 전장에 직접 참전하며, 마주친 몬스터와 보스가 도감에 기록될 때마다 영구 공격력이 누적됩니다.</p>
               </article>
               <article class="feature-card">
-                <div class="feature-icon">🏰</div>
-                <h3>진격 나팔 &amp; 왕국 귀환</h3>
-                <p>사기 100% 진격 나팔로 전군 일제 공세를 펼치고, 원정 귀환 훈장으로 왕국 영구 시설을 건설하세요.</p>
+                <div class="feature-icon">📦</div>
+                <h3>연속 퀘스트 · 오프라인 전리품</h3>
+                <p>가이드 퀘스트, 보스 재도전/반복 파밍 전환, 최대 12시간 오프라인 방치 전리품, 8-bit BGM, 세이브 코드 백업을 지원합니다.</p>
               </article>
             </div>
           </div>

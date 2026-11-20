@@ -12,6 +12,14 @@ export type FacilityKey = 'royalForge' | 'warAcademy' | 'supplyWagon' | 'guildHa
 
 export type EnemyKind = 'goblin' | 'boar' | 'bandit' | 'scorpion' | 'bogling' | 'golem' | 'wyvern' | 'boss';
 
+export type ItemTraitId = 'doubleStrike' | 'vampiric' | 'oreFinder' | 'bossBreaker';
+
+export interface ItemTraitDef {
+  id: ItemTraitId;
+  name: string;
+  desc: string;
+}
+
 export interface ZoneDef {
   id: string;
   name: string;
@@ -47,10 +55,11 @@ export interface EquipItem {
   name: string;
   rarity: ItemRarity;
   level: number;
-  power: number; // weapon->atk, shield->maxHp, armor->def/regen
+  power: number;
   bonusLabel: string;
   bonusStat: 'crit' | 'gold' | 'speed' | 'hp';
   bonusValue: number;
+  trait?: ItemTraitId;
 }
 
 export interface TrainingDef {
@@ -84,17 +93,49 @@ export interface FacilityDef {
   icon: string;
 }
 
+export type QuestGoalType =
+  | 'kills'
+  | 'forges'
+  | 'stage'
+  | 'companions'
+  | 'stanceSwitch'
+  | 'rally'
+  | 'refine'
+  | 'bossKills';
+
+export interface QuestDef {
+  index: number;
+  title: string;
+  goalType: QuestGoalType;
+  target: number;
+  rewardGold: number;
+  rewardOre: number;
+  rewardMedals?: number;
+}
+
+export interface OfflineReport {
+  elapsedSeconds: number;
+  kills: number;
+  gold: number;
+  ore: number;
+}
+
 export interface EnemyEntity {
   id: number;
   kind: EnemyKind;
   name: string;
   isBoss: boolean;
   x: number;
+  knockbackX: number;
   hp: number;
   maxHp: number;
   atk: number;
   attackTimer: number;
   attackInterval: number;
+  /** Boss heavy strike windup 0..1 — switch to Bulwark to Perfect Guard! */
+  heavyWindup: number;
+  heavyCooldown: number;
+  stunTimer: number;
   hitFlash: number;
   animTime: number;
   goldReward: number;
@@ -103,7 +144,7 @@ export interface EnemyEntity {
 
 export interface Projectile {
   id: number;
-  kind: 'arrow' | 'fireball' | 'healWave';
+  kind: 'arrow' | 'fireball';
   x: number;
   y: number;
   vx: number;
@@ -157,6 +198,10 @@ export interface ComputedStats {
   regenPerSec: number;
   goldMult: number;
   oreMult: number;
+  doubleStrikeChance: number;
+  lifesteal: number;
+  bossDmgMult: number;
+  codexAtkBonus: number;
   dps: number;
   forgeLevel: number;
   rankTitle: string;
@@ -172,6 +217,8 @@ export type GameEventType =
   | 'forgeRare'
   | 'rally'
   | 'stance'
+  | 'perfectGuard'
+  | 'questClaim'
   | 'bossWarning'
   | 'bossKill'
   | 'upgrade'
@@ -187,20 +234,33 @@ export interface SaveData {
   stage: number;
   highestStage: number;
   wave: number;
+  farmMode: boolean;
   gold: number;
   ore: number;
   medals: number;
   forgeExp: number;
   stance: StanceId;
   equipment: Record<EquipSlot, EquipItem>;
+  refineLevels: Record<EquipSlot, number>;
   training: Record<TrainingKey, number>;
   companions: Record<CompanionId, number>;
   facilities: Record<FacilityKey, number>;
-  speedMult: 1 | 2;
+  questIndex: number;
+  questBaseline: number;
+  discoveredEnemies: string[];
+  discoveredBosses: number[];
+  speedMult: 1 | 2 | 3;
   autoRally: boolean;
+  autoForge: boolean;
   soundEnabled: boolean;
+  bgmEnabled: boolean;
   totalKills: number;
+  totalBossKills: number;
   totalForges: number;
+  totalRefines: number;
+  totalStanceSwitches: number;
+  totalRallies: number;
+  totalPerfectGuards: number;
   expeditionReturns: number;
   totalPlaySeconds: number;
   savedAt: number;
@@ -210,6 +270,7 @@ export interface GameState {
   stage: number;
   highestStage: number;
   wave: number; // 1..5
+  farmMode: boolean; // true = loop waves 1..4 safely until player taps Boss Challenge
   gold: number;
   ore: number;
   medals: number;
@@ -217,11 +278,18 @@ export interface GameState {
 
   stance: StanceId;
   equipment: Record<EquipSlot, EquipItem>;
+  refineLevels: Record<EquipSlot, number>;
   pendingForgeItem: EquipItem | null;
 
   training: Record<TrainingKey, number>;
   companions: Record<CompanionId, number>;
   facilities: Record<FacilityKey, number>;
+
+  questIndex: number;
+  questBaseline: number;
+  discoveredEnemies: string[];
+  discoveredBosses: number[];
+  offlineReport: OfflineReport | null;
 
   heroHp: number;
   heroMaxHp: number;
@@ -231,19 +299,25 @@ export interface GameState {
   heroAttackTimer: number;
   animTime: number;
   scrollX: number;
+  comboCount: number;
+  comboTimer: number;
 
   companionTimers: Record<CompanionId, number>;
   companionCastTimers: Record<CompanionId, number>;
 
   morale: number; // 0..100
-  rallyTimer: number; // >0 while Warhorn Rally is active
+  rallyTimer: number;
+  autoForgeTimer: number;
   screenShake: number;
   bannerText: string;
   bannerTimer: number;
 
-  speedMult: 1 | 2;
+  speedMult: 1 | 2 | 3;
   autoRally: boolean;
+  autoForge: boolean;
   soundEnabled: boolean;
+  bgmEnabled: boolean;
+  buyStep: 1 | 10;
 
   enemies: EnemyEntity[];
   projectiles: Projectile[];
@@ -252,7 +326,12 @@ export interface GameState {
   particles: Particle[];
 
   totalKills: number;
+  totalBossKills: number;
   totalForges: number;
+  totalRefines: number;
+  totalStanceSwitches: number;
+  totalRallies: number;
+  totalPerfectGuards: number;
   expeditionReturns: number;
   totalPlaySeconds: number;
 }

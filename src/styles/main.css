@@ -816,16 +816,256 @@ canvas {
 .stance-desc { font-size: 9px; color: var(--text-dim); }
 
 .quick-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.quick-bar.five { grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .quick-btn {
   font-family: var(--font-pixel);
-  font-size: 10px;
-  padding: 5px;
+  font-size: 9px;
+  padding: 5px 2px;
   border-radius: 6px;
   background: #162442;
   border: 1px solid var(--border-subtle);
   color: var(--text-dim);
 }
 .quick-btn.on { border-color: var(--border-amber); color: var(--amber-bright); background: rgba(245, 158, 11, 0.12); }
+
+/* Quest Strip */
+.quest-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  background: #0d182d;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.quest-strip.complete {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.28), rgba(250, 204, 21, 0.16));
+  border-bottom-color: var(--amber-bright);
+  animation: pulseQuest 0.8s infinite alternate;
+}
+@keyframes pulseQuest {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.16); }
+}
+.quest-tag {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #1d4ed8;
+  color: #fff;
+  flex-shrink: 0;
+}
+.quest-strip.complete .quest-tag {
+  background: var(--amber);
+  color: #0f172a;
+}
+.quest-title {
+  flex: 1;
+  font-size: 11px;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quest-prog {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--amber-bright);
+  flex-shrink: 0;
+}
+
+/* Boss Challenge Button & Bulwark Guard Cue */
+.arena-boss-btn {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  background: linear-gradient(180deg, #ef4444, #b91c1c);
+  border: 1px solid #fca5a5;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.5);
+}
+
+.stance-btn.guard-cue {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
+  animation: pulseBtn 0.42s infinite alternate;
+}
+
+/* Forge Enhancements & Auto-Forge */
+.toggle-chip {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #1d2d4f;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.toggle-chip.on {
+  border-color: var(--amber-bright);
+  color: var(--amber-bright);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.equip-row-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.equip-info { flex: 1; min-width: 0; }
+.refine-tag {
+  font-style: normal;
+  color: var(--amber-bright);
+  margin-left: 3px;
+}
+.refine-btn {
+  min-width: 72px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #1d2d4f;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.refine-btn small { font-size: 9px; margin-top: 2px; }
+.refine-btn.can-buy {
+  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+  border-color: #93c5fd;
+  color: #fff;
+}
+
+.trait-chip {
+  margin-top: 5px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #fde047;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 5px;
+  padding: 2px 6px;
+  display: inline-block;
+}
+
+/* Monster & Boss Pixel Codex */
+.codex-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.codex-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  background: #111c33;
+  border: 1px solid var(--border-subtle);
+  text-align: center;
+}
+.codex-cell.seen {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: #162544;
+}
+.codex-cell.boss.seen {
+  border-color: var(--border-amber);
+}
+.codex-cell small {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.codex-cell.seen small { color: #e2e8f0; }
+
+.codex-sprite {
+  display: block;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: brightness(0) opacity(0.35);
+}
+.codex-cell.seen .codex-sprite {
+  filter: none;
+}
+.codex-sprite.enemy {
+  width: 34px;
+  height: 34px;
+  background-size: 68px 238px;
+}
+.codex-sprite.boss {
+  width: 40px;
+  height: 40px;
+  background-size: 80px 200px;
+}
+
+/* Modals, Offline Loot, Save Actions, Toast */
+.confirm-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.offline-loot-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.loot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #0d1629;
+  border: 1px solid var(--border-amber);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  color: var(--amber-bright);
+}
+.modal-actions.two {
+  grid-template-columns: 1fr 1fr;
+}
+.save-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  margin-top: 6px;
+}
+.toast-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid var(--amber-bright);
+  color: var(--amber-bright);
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
 
 /* Panel Body */
 .panel-body {

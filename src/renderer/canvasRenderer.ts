@@ -28,13 +28,11 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     );
   }
 
-  // 1. Rich Pixel-Art Zone Background with subtle road parallax scrolling
+  // 1. Rich Pixel-Art Zone Background with cobblestone road parallax scrolling
   const bgImg = assets.bg[zone.id];
   if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-    // Upper scenery (y: 0..GROUND_Y)
     ctx.drawImage(bgImg, 0, 0, ARENA_WIDTH, GROUND_Y, 0, 0, ARENA_WIDTH, GROUND_Y);
 
-    // Lower cobblestone/flagstone road (y: GROUND_Y..ARENA_HEIGHT) seamlessly scrolling!
     const roadH = ARENA_HEIGHT - GROUND_Y;
     const scroll = Math.floor(state.scrollX) % ARENA_WIDTH;
     ctx.drawImage(bgImg, scroll, GROUND_Y, ARENA_WIDTH - scroll, roadH, 0, GROUND_Y, ARENA_WIDTH - scroll, roadH);
@@ -42,16 +40,15 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
       ctx.drawImage(bgImg, 0, GROUND_Y, scroll, roadH, ARENA_WIDTH - scroll, GROUND_Y, scroll, roadH);
     }
   } else {
-    // Minimal fallback while PNG finishes decoding on first frame
     ctx.fillStyle = zone.skyTop;
     ctx.fillRect(0, 0, ARENA_WIDTH, GROUND_Y);
     ctx.fillStyle = zone.roadBase;
     ctx.fillRect(0, GROUND_Y, ARENA_WIDTH, ARENA_HEIGHT - GROUND_Y);
   }
 
-  // Subtle ambient atmosphere per zone (falling snow in Frostpeak, rising embers in Cinder)
+  // Zone ambient particles
   if (zone.id === 'frostpeak') {
-    ctx.fillStyle = 'rgba(224, 242, 254, 0.75)';
+    ctx.fillStyle = 'rgba(224, 242, 254, 0.78)';
     for (let i = 0; i < 18; i++) {
       const sx = (i * 53 + timeSec * 22) % ARENA_WIDTH;
       const sy = (i * 37 + timeSec * 36) % GROUND_Y;
@@ -66,13 +63,13 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     }
   }
 
-  // Warhorn Rally warm golden overlay tint
+  // Warhorn Rally golden overlay
   if (state.rallyTimer > 0) {
     ctx.fillStyle = `rgba(250, 204, 21, ${(0.1 + Math.sin(timeSec * 10) * 0.04).toFixed(2)})`;
     ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
   }
 
-  // 2. Active Companions marching behind the Knight (48x48 sprite sheets, feet at y=44)
+  // 2. Active Companions (48x48 sprite sheets)
   const bob = Math.round(Math.abs(Math.sin(state.animTime * 6)) * 1.5);
 
   if (state.companions.banneret > 0 && assets.banneret.complete && assets.banneret.naturalWidth > 0) {
@@ -99,16 +96,15 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.drawImage(assets.ranger, frame * 48, 0, 48, 48, Math.round(cx - 24), Math.round(GROUND_Y - 40 - bob), 48, 48);
   }
 
-  // 3. Hero Expedition Knight (64x64 sprite sheet, feet at y=58)
+  // 3. Hero Expedition Knight (64x64 sprite sheet)
   drawShadow(ctx, HERO_X, GROUND_Y + 5, 20);
 
-  // Subtle Stance Floor Ring
   const stanceRing =
     state.stance === 'vanguard'
-      ? 'rgba(249, 115, 22, 0.55)'
+      ? 'rgba(249, 115, 22, 0.58)'
       : state.stance === 'bulwark'
-      ? 'rgba(56, 189, 248, 0.65)'
-      : 'rgba(250, 204, 21, 0.55)';
+      ? 'rgba(56, 189, 248, 0.68)'
+      : 'rgba(250, 204, 21, 0.58)';
   ctx.strokeStyle = stanceRing;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -118,9 +114,9 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   if (assets.knight.complete && assets.knight.naturalWidth > 0) {
     let kFrame = 0;
     if (state.rallyTimer > 8.15) {
-      kFrame = 5; // Rally victory pose on Warhorn trigger!
+      kFrame = 5;
     } else if (state.heroAction === 'swing') {
-      kFrame = state.heroActionTimer > 0.14 ? 3 : 4; // Windup -> Crescent Slash
+      kFrame = state.heroActionTimer > 0.14 ? 3 : 4;
     } else {
       const cycle = [0, 1, 2, 1];
       kFrame = cycle[Math.floor(state.animTime * 7) % cycle.length];
@@ -135,7 +131,6 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     ctx.drawImage(spriteSrc, kFrame * 64, 0, 64, 64, drawX, drawY, 64, 64);
   }
 
-  // Bulwark Energy Shield Dome
   if (state.heroShield > 0) {
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
     ctx.lineWidth = 2;
@@ -145,11 +140,13 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   }
 
   // 4. Enemies & Zone Bosses
+  let activeBoss: EnemyEntity | null = null;
   for (const enemy of state.enemies) {
+    if (enemy.isBoss) activeBoss = enemy;
     drawEnemy(ctx, enemy, zoneIndex, assets);
   }
 
-  // 5. Companion Projectiles (Arrows & Fireballs)
+  // 5. Companion Projectiles
   for (const p of state.projectiles) {
     if (p.kind === 'arrow') {
       ctx.fillStyle = '#141928';
@@ -175,7 +172,7 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     }
   }
 
-  // 6. Pixel VFX Sprite Sheet Overlays (Slash, Crit Starburst, Fireball Explosion, Rally Beam)
+  // 6. Pixel VFX Sprite Sheet Overlays
   if (assets.vfx.complete && assets.vfx.naturalWidth > 0) {
     for (const fx of state.vfxList) {
       const progress = 1 - fx.life / fx.maxLife;
@@ -197,7 +194,7 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
     }
   }
 
-  // 7. Pixel Spark Particles
+  // 7. Particles
   for (const p of state.particles) {
     ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
     ctx.fillStyle = p.color;
@@ -217,19 +214,60 @@ export function renderArena(ctx: CanvasRenderingContext2D, state: GameState, tim
   }
   ctx.globalAlpha = 1;
 
-  // 9. Top Announcement Banner
+  // 9. Combo Counter (Top-Left of Arena)
+  if (state.comboCount >= 3) {
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.font = '700 13px Galmuri9, monospace';
+    ctx.fillStyle = '#090d16';
+    ctx.fillText(`${state.comboCount} HIT!`, 11, 23);
+    ctx.fillStyle = state.comboCount >= 15 ? '#f97316' : '#fde047';
+    ctx.fillText(`${state.comboCount} HIT!`, 10, 22);
+    ctx.restore();
+  }
+
+  // 10. Boss Dedicated Top Nameplate & HP Bar + Heavy Attack Telegraph
+  if (activeBoss) {
+    const barW = 200;
+    const bx = Math.round((ARENA_WIDTH - barW) / 2);
+    const by = 10;
+    const ratio = Math.max(0, activeBoss.hp / activeBoss.maxHp);
+
+    ctx.fillStyle = 'rgba(11, 18, 32, 0.86)';
+    ctx.fillRect(bx - 6, by - 4, barW + 12, 28);
+    ctx.strokeStyle = activeBoss.heavyWindup > 0 ? '#ef4444' : '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx - 6, by - 4, barW + 12, 28);
+
+    ctx.font = '700 10px Galmuri9, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = activeBoss.heavyWindup > 0 ? '#fca5a5' : '#fef08a';
+    const title =
+      activeBoss.heavyWindup > 0
+        ? `⚠ 강타 예고! 지금 🛡️철벽 전환!`
+        : `👑 ${activeBoss.name}`;
+    ctx.fillText(title, ARENA_WIDTH / 2, by + 8);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(bx, by + 13, barW, 7);
+    ctx.fillStyle = activeBoss.heavyWindup > 0 ? '#ef4444' : '#f97316';
+    ctx.fillRect(bx, by + 13, Math.round(barW * ratio), 7);
+  }
+
+  // 11. Top Announcement Banner (offset below boss bar if boss active)
   if (state.bannerTimer > 0 && state.bannerText) {
+    const by = activeBoss ? 42 : 12;
     ctx.save();
     ctx.globalAlpha = Math.min(1, state.bannerTimer * 1.6);
     ctx.fillStyle = 'rgba(11, 18, 32, 0.88)';
-    ctx.fillRect(28, 12, ARENA_WIDTH - 56, 26);
+    ctx.fillRect(24, by, ARENA_WIDTH - 48, 24);
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(28, 12, ARENA_WIDTH - 56, 26);
+    ctx.strokeRect(24, by, ARENA_WIDTH - 48, 24);
     ctx.fillStyle = '#fef08a';
-    ctx.font = '700 11px Galmuri9, monospace';
+    ctx.font = '700 10px Galmuri9, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(state.bannerText, ARENA_WIDTH / 2, 29);
+    ctx.fillText(state.bannerText, ARENA_WIDTH / 2, by + 16);
     ctx.restore();
   }
 
@@ -250,61 +288,46 @@ function drawEnemy(
   assets: ReturnType<typeof getPixelAssets>
 ): void {
   const frame = Math.floor(e.animTime * (e.isBoss ? 2.6 : 4.2)) % 2;
+  const ex = Math.round(e.x + e.knockbackX);
 
   if (e.isBoss) {
-    drawShadow(ctx, e.x, GROUND_Y + 6, 30);
+    drawShadow(ctx, ex, GROUND_Y + 6, 30);
     if (assets.bosses.complete && assets.bosses.naturalWidth > 0) {
       const bossRow = zoneIndex % 5;
       const src = e.hitFlash > 0.25 && assets.whiteFlash.bosses ? assets.whiteFlash.bosses : assets.bosses;
-      ctx.drawImage(
-        src,
-        frame * 80,
-        bossRow * 80,
-        80,
-        80,
-        Math.round(e.x - 40),
-        Math.round(GROUND_Y - 70),
-        80,
-        80
-      );
+      ctx.drawImage(src, frame * 80, bossRow * 80, 80, 80, ex - 40, Math.round(GROUND_Y - 70), 80, 80);
     }
 
-    // Boss Name & HP Bar
-    const hpW = 68;
-    const hpY = GROUND_Y - 76;
-    const ratio = Math.max(0, e.hp / e.maxHp);
-    ctx.fillStyle = 'rgba(11, 18, 32, 0.9)';
-    ctx.fillRect(Math.round(e.x - hpW / 2) - 1, hpY - 1, hpW + 2, 7);
-    ctx.fillStyle = '#f97316';
-    ctx.fillRect(Math.round(e.x - hpW / 2), hpY, Math.round(hpW * ratio), 5);
+    if (e.stunTimer > 0) {
+      ctx.font = '700 10px Galmuri9, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('STUN!', ex, GROUND_Y - 74);
+    } else if (e.heavyWindup > 0) {
+      const cw = 54;
+      const cy = GROUND_Y - 78;
+      ctx.fillStyle = 'rgba(11, 18, 32, 0.85)';
+      ctx.fillRect(ex - cw / 2, cy, cw, 5);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(ex - cw / 2, cy, Math.round(cw * e.heavyWindup), 5);
+    }
     return;
   }
 
   const hoverY = e.kind === 'wyvern' ? Math.round(Math.sin(e.animTime * 6) * 4 - 8) : 0;
-  drawShadow(ctx, e.x, GROUND_Y + 4, 16);
+  drawShadow(ctx, ex, GROUND_Y + 4, 16);
 
   if (assets.enemies.complete && assets.enemies.naturalWidth > 0) {
     const row = ENEMY_ROW[e.kind as Exclude<EnemyKind, 'boss'>] ?? 0;
     const src = e.hitFlash > 0.25 && assets.whiteFlash.enemies ? assets.whiteFlash.enemies : assets.enemies;
-    ctx.drawImage(
-      src,
-      frame * 48,
-      row * 48,
-      48,
-      48,
-      Math.round(e.x - 24),
-      Math.round(GROUND_Y - 40 + hoverY),
-      48,
-      48
-    );
+    ctx.drawImage(src, frame * 48, row * 48, 48, 48, ex - 24, Math.round(GROUND_Y - 40 + hoverY), 48, 48);
   }
 
-  // Crisp Pixel HP Bar
   const hpW = 34;
   const hpY = GROUND_Y - 46 + hoverY;
   const ratio = Math.max(0, e.hp / e.maxHp);
   ctx.fillStyle = 'rgba(11, 18, 32, 0.88)';
-  ctx.fillRect(Math.round(e.x - hpW / 2) - 1, hpY - 1, hpW + 2, 6);
+  ctx.fillRect(ex - hpW / 2 - 1, hpY - 1, hpW + 2, 6);
   ctx.fillStyle = '#ef4444';
-  ctx.fillRect(Math.round(e.x - hpW / 2), hpY, Math.round(hpW * ratio), 4);
+  ctx.fillRect(ex - hpW / 2, hpY, Math.round(hpW * ratio), 4);
 }
